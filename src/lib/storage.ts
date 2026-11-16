@@ -182,6 +182,10 @@ export function getDefaultSampleTasks(): Task[] {
   ];
 }
 
+const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsaHhzanZvcGJweHdoeHlvY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NDU3MDQsImV4cCI6MjExMDQyMTcwNH0.HD65cftiSeOvnaZNU4ahmDGwspct3yshwvquiC6sHV0";
+
 export function getActiveSupabaseConfig(): SupabaseConfig | null {
   const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const envKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -209,7 +213,10 @@ export function getActiveSupabaseConfig(): SupabaseConfig | null {
     }
   }
 
-  return null;
+  return {
+    url: DEFAULT_SUPABASE_URL,
+    anonKey: DEFAULT_SUPABASE_ANON_KEY,
+  };
 }
 
 export function saveRuntimeSupabaseConfig(config: SupabaseConfig | null): void {

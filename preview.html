@@ -277,13 +277,19 @@
       ];
     }
 
+    const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
+    const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsaHhzanZvcGJweHdoeHlvY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NDU3MDQsImV4cCI6MjExMDQyMTcwNH0.HD65cftiSeOvnaZNU4ahmDGwspct3yshwvquiC6sHV0";
+
     function getSupabaseClient() {
       try {
         const raw = localStorage.getItem(LOCAL_SUPABASE_CONFIG_KEY);
-        if (!raw) return null;
-        const cfg = JSON.parse(raw);
-        if (!cfg.url || !cfg.anonKey) return null;
-        return window.supabase.createClient(cfg.url, cfg.anonKey);
+        if (raw) {
+          const cfg = JSON.parse(raw);
+          if (cfg.url && cfg.anonKey) {
+            return window.supabase.createClient(cfg.url, cfg.anonKey);
+          }
+        }
+        return window.supabase.createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY);
       } catch {
         return null;
       }
