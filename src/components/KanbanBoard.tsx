@@ -2,17 +2,12 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  Banknote,
   Calendar,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Cloud,
   CloudOff,
-  Edit3,
   Filter,
-  GripVertical,
   Layers,
   Plus,
   RefreshCw,
@@ -20,10 +15,7 @@ import {
   Settings,
   Sliders,
   Trash2,
-  Truck,
   UploadCloud,
-  User,
-  Wallet,
   X,
 } from "lucide-react";
 import {
@@ -102,7 +94,7 @@ const COLUMNS: {
     id: "delivered",
     title: "ส่งแล้ว",
     accent: "border-t-sky-500",
-    headerBg: "bg-gradient-to-r from-sky-100/80 to-emerald-100/70",
+    headerBg: "bg-sky-100/70",
     badgeBg: "bg-emerald-100 text-emerald-800 border border-emerald-300",
   },
 ];
@@ -150,6 +142,21 @@ const THAI_MONTHS = [
   "ธันวาคม",
 ];
 
+const THAI_SHORT_MONTHS = [
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
+];
+
 function getCurrentMonthStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -166,6 +173,14 @@ function formatThaiMonth(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
   if (!y || !m) return ym;
   return `${THAI_MONTHS[m - 1]} ${y} (พ.ศ. ${y + 543})`;
+}
+
+function formatShortDate(dateStr: string | null): string {
+  if (!dateStr) return "ไม่ระบุ";
+  const parts = dateStr.split("-").map(Number);
+  if (parts.length !== 3) return dateStr;
+  const [, m, d] = parts;
+  return `${d} ${THAI_SHORT_MONTHS[m - 1] || ""}`;
 }
 
 function shiftMonth(ym: string, delta: number): string {
@@ -224,6 +239,11 @@ export default function KanbanBoard() {
   // Drag state
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
+
+  // Delivery Payment Prompt Modal (when moving to "delivered" with unpaid balance)
+  const [pendingDeliveryTask, setPendingDeliveryTask] = useState<Task | null>(
+    null
+  );
 
   // Task Modal state
   const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
@@ -335,6 +355,9 @@ export default function KanbanBoard() {
       0
     );
     const totalCollected = Math.max(0, totalRevenue - totalRemainingToCollect);
+    const deliveredUnpaidCount = tasks.filter(
+      (t) => t.status === "delivered" && getRemainingBalance(t) > 0
+    ).length;
 
     return {
       total,
@@ -345,6 +368,7 @@ export default function KanbanBoard() {
       totalRevenue,
       totalCollected,
       totalRemainingToCollect,
+      deliveredUnpaidCount,
     };
   }, [tasks]);
 
@@ -471,33 +495,57 @@ export default function KanbanBoard() {
     }
   };
 
-  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+  const commitStatusChange = async (
+    taskId: string,
+    newStatus: TaskStatus,
+    alsoMarkPaid = false
+  ) => {
     const target = tasks.find((t) => t.id === taskId);
-    if (!target || target.status === newStatus) return;
+    if (!target) return;
 
     const updatedMonth =
       newStatus === "delivered" && target.month < selectedMonth
         ? selectedMonth
         : target.month;
 
+    const extraPayment: Partial<Task> = alsoMarkPaid
+      ? {
+          payment_status: "fully_paid",
+          deposit_amount: Number(target.agreed_price) || 0,
+        }
+      : {};
+
     setTasks((prev) =>
       prev.map((t) =>
-        t.id === taskId ? { ...t, status: newStatus, month: updatedMonth } : t
+        t.id === taskId
+          ? { ...t, status: newStatus, month: updatedMonth, ...extraPayment }
+          : t
       )
     );
 
     try {
-      await updateTask(taskId, { status: newStatus, month: updatedMonth });
+      await updateTask(taskId, {
+        status: newStatus,
+        month: updatedMonth,
+        ...extraPayment,
+      });
     } catch (err: unknown) {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskId
-            ? { ...t, status: target.status, month: target.month }
-            : t
-        )
-      );
+      await loadBoard(selectedMonth);
       alert(err instanceof Error ? err.message : "อัปเดตสถานะไม่สำเร็จ");
     }
+  };
+
+  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target || target.status === newStatus) return;
+
+    // ถ้าย้ายเข้าเลน "ส่งแล้ว" แต่ยังเก็บเงินไม่ครบ ให้เด้งถามเตือนทันที!
+    if (newStatus === "delivered" && getRemainingBalance(target) > 0) {
+      setPendingDeliveryTask(target);
+      return;
+    }
+
+    await commitStatusChange(taskId, newStatus, false);
   };
 
   const handleMarkFullyPaid = async (task: Task) => {
@@ -674,7 +722,7 @@ export default function KanbanBoard() {
             </button>
             <button
               onClick={() => openCreateModal("todo")}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-pink-200 via-pink-100 to-sky-200 hover:from-white hover:to-sky-100 text-[#581322] shadow-md shadow-black/25 transition"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-pink-100 hover:bg-white text-[#581322] shadow-md shadow-black/25 transition"
             >
               <Plus className="w-4 h-4" />
               <span>เพิ่มงานใหม่</span>
@@ -687,7 +735,7 @@ export default function KanbanBoard() {
       {bannerError && (
         <div className="max-w-[1850px] mx-auto w-full px-3 sm:px-6 pt-3">
           <div className="bg-amber-50 border border-amber-300 text-amber-900 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-sm">
-            <span>⚠️ {bannerError}</span>
+            <span>{bannerError}</span>
             <button
               onClick={() => setBannerError(null)}
               className="text-amber-600 hover:text-amber-900"
@@ -704,9 +752,7 @@ export default function KanbanBoard() {
         <div className="bg-white/90 backdrop-blur-sm border-2 border-[#7b1e34]/15 rounded-2xl p-3.5 sm:p-4 shadow-sm shadow-[#7b1e34]/5">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#7b1e34] text-pink-100 flex items-center justify-center shadow-sm">
-                <Layers className="w-4 h-4" />
-              </div>
+              <span className="w-2 h-5 rounded-full bg-[#7b1e34]" />
               <h2 className="text-xs sm:text-sm font-bold text-[#581322]">
                 โควต้างานแต่ละขนาดประจำเดือน ({formatThaiMonth(selectedMonth)})
               </h2>
@@ -748,7 +794,7 @@ export default function KanbanBoard() {
                       ? "bg-rose-100/70 border-rose-400 hover:border-[#7b1e34]"
                       : q.isNearFull
                       ? "bg-amber-50/90 border-amber-300 hover:border-amber-400"
-                      : "bg-gradient-to-br from-white via-pink-50/40 to-sky-50/50 border-purple-200 hover:border-[#7b1e34]/50"
+                      : "bg-white border-purple-200 hover:border-[#7b1e34]/50"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
@@ -884,11 +930,24 @@ export default function KanbanBoard() {
             </p>
           </div>
 
-          {/* Card 3: Pastel Purple Accent */}
-          <div className="bg-white/90 border border-purple-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
-            <p className="text-xs text-purple-900/80 font-medium">
-              รอเก็บส่วนที่เหลือตอนส่ง
-            </p>
+          {/* Card 3: Pastel Purple Accent + Delivered Unpaid Alert */}
+          <div
+            className={`rounded-2xl p-3.5 shadow-sm flex flex-col justify-between border ${
+              stats.deliveredUnpaidCount > 0
+                ? "bg-amber-50/95 border-amber-400"
+                : "bg-white/90 border-purple-200"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-xs text-purple-900/80 font-medium">
+                รอเก็บส่วนที่เหลือตอนส่ง
+              </p>
+              {stats.deliveredUnpaidCount > 0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#7b1e34] text-white">
+                  🚨 ส่งแล้วค้างจ่าย {stats.deliveredUnpaidCount} งาน
+                </span>
+              )}
+            </div>
             <p className="text-lg sm:text-xl font-bold text-[#7b1e34] mt-1">
               ฿{formatTHB(stats.totalRemainingToCollect)}
             </p>
@@ -1133,7 +1192,7 @@ export default function KanbanBoard() {
                 </div>
 
                 {/* Cards Container */}
-                <div className="p-2.5 space-y-2.5 flex-1">
+                <div className="p-3 space-y-3 flex-1">
                   {colTasks.length === 0 ? (
                     <div className="h-36 rounded-xl border border-dashed border-purple-200 bg-purple-50/30 flex flex-col items-center justify-center text-purple-500 text-xs p-3 text-center">
                       <p>ไม่มีงานในสถานะนี้</p>
@@ -1155,9 +1214,10 @@ export default function KanbanBoard() {
                       const agreedPrice = Number(task.agreed_price) || 0;
                       const paymentStatus: PaymentStatus =
                         task.payment_status || "unpaid_deposit";
-                      const depositAmount = Number(task.deposit_amount) || 0;
                       const remainingBalance = getRemainingBalance(task);
                       const isCarriedOver = task.month < selectedMonth;
+                      const isDeliveredButUnpaid =
+                        task.status === "delivered" && remainingBalance > 0;
 
                       return (
                         <div
@@ -1168,14 +1228,16 @@ export default function KanbanBoard() {
                             setDraggedTaskId(null);
                             setDragOverColumn(null);
                           }}
-                          className={`group rounded-xl bg-white border p-3 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing ${
-                            dueState === "overdue"
+                          className={`rounded-2xl bg-white border p-3.5 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing space-y-2.5 ${
+                            isDeliveredButUnpaid
+                              ? "border-2 border-amber-500 bg-amber-50/40"
+                              : dueState === "overdue"
                               ? "border-[#7b1e34] bg-rose-50/70 ring-1 ring-[#7b1e34]/20"
                               : "border-pink-200/90 hover:border-[#7b1e34]/60"
                           }`}
                         >
-                          {/* Top Row: Size Badge + Priority + Carry-over + Due Alert + Actions */}
-                          <div className="flex items-center justify-between gap-1.5 mb-2">
+                          {/* Row 1: Badges + Edit Button */}
+                          <div className="flex items-center justify-between gap-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
                                 className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
@@ -1197,150 +1259,116 @@ export default function KanbanBoard() {
 
                               {isCarriedOver && (
                                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
-                                  📌 ยกมาจาก {task.month}
+                                  ยกมาจาก {task.month}
                                 </span>
                               )}
 
                               {dueState === "overdue" && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#7b1e34] text-white animate-pulse">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  เลยกำหนด!
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#7b1e34] text-white animate-pulse">
+                                  🚨 เลยกำหนด
                                 </span>
                               )}
                             </div>
 
-                            <div className="flex items-center gap-0.5">
-                              <button
-                                onClick={() => openEditModal(task)}
-                                className="p-1 rounded hover:bg-pink-50 text-purple-500 hover:text-[#7b1e34]"
-                                title="แก้ไขงาน"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTask(task.id)}
-                                className="p-1 rounded hover:bg-rose-50 text-purple-400 hover:text-[#7b1e34]"
-                                title="ลบงาน"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                              <GripVertical className="w-3.5 h-3.5 text-pink-300 hidden sm:inline" />
-                            </div>
+                            <button
+                              onClick={() => openEditModal(task)}
+                              className="text-xs px-1.5 py-0.5 rounded hover:bg-pink-50 text-purple-600 hover:text-[#7b1e34] font-semibold shrink-0"
+                            >
+                              แก้ไข
+                            </button>
                           </div>
 
-                          {/* Task Title */}
-                          <h3
-                            onClick={() => openEditModal(task)}
-                            className={`font-bold text-sm leading-snug cursor-pointer hover:text-[#7b1e34] transition ${
-                              task.status === "delivered"
-                                ? "line-through text-slate-400"
-                                : "text-[#4a1220]"
-                            }`}
-                          >
-                            {task.title}
-                          </h3>
+                          {/* Row 2: Title & Customer (No Strikethrough on Thai text!) */}
+                          <div>
+                            <h3
+                              onClick={() => openEditModal(task)}
+                              className={`font-bold text-sm leading-relaxed cursor-pointer hover:text-[#7b1e34] transition ${
+                                task.status === "delivered"
+                                  ? "text-[#4a1220]/75"
+                                  : "text-[#4a1220]"
+                              }`}
+                            >
+                              {task.title}
+                            </h3>
 
-                          {/* Customer Name (Baby Blue pill) */}
-                          {task.customer_name && (
-                            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-sky-100/90 border border-sky-200 text-xs text-sky-900 font-semibold max-w-full">
-                              <User className="w-3 h-3 shrink-0 text-sky-700" />
-                              <span className="truncate">
+                            {task.customer_name && (
+                              <p className="mt-1 text-xs font-semibold text-sky-900 bg-sky-100/80 border border-sky-200/80 inline-block px-2 py-0.5 rounded-md max-w-full truncate">
                                 {task.customer_name}
-                              </span>
+                              </p>
+                            )}
+
+                            {task.description && (
+                              <p className="text-xs text-slate-500 mt-1.5 line-clamp-1">
+                                {task.description}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Row 3: Compact 1-Block Payment Summary (With Alert if Delivered & Unpaid!) */}
+                          {isDeliveredButUnpaid ? (
+                            <div className="p-2.5 rounded-xl bg-amber-100/90 border border-amber-400 flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-[11px] font-bold text-[#7b1e34]">
+                                  🚨 ส่งแล้ว • ยังไม่เก็บส่วนที่เหลือ
+                                </p>
+                                <p className="text-xs font-bold text-[#581322] mt-0.5">
+                                  ค้างชำระ ฿{formatTHB(remainingBalance)}{" "}
+                                  <span className="font-normal text-[11px] text-purple-900/70">
+                                    (จาก ฿{formatTHB(agreedPrice)})
+                                  </span>
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleMarkFullyPaid(task)}
+                                className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-[#7b1e34] hover:bg-[#581322] text-white font-bold shadow-sm transition"
+                              >
+                                รับครบแล้ว
+                              </button>
                             </div>
-                          )}
-
-                          {/* Task Description */}
-                          {task.description && (
-                            <p className="text-xs text-slate-600 mt-1.5 line-clamp-2 leading-relaxed">
-                              {task.description}
-                            </p>
-                          )}
-
-                          {/* Price, Deposit Status & Remaining Balance Box (Pastel Pink + Purple + Baby Blue) */}
-                          <div className="mt-2.5 p-2 rounded-lg bg-gradient-to-br from-pink-50/90 via-purple-50/70 to-sky-50/90 border border-purple-200/80 space-y-1 text-[11px]">
-                            <div className="flex items-center justify-between">
-                              <span className="text-purple-900/80 font-medium">
-                                ราคาที่ตกลง:
+                          ) : remainingBalance === 0 ? (
+                            <div className="px-2.5 py-1.5 rounded-xl bg-sky-50/90 border border-sky-200/80 flex items-center justify-between text-xs">
+                              <span className="text-sky-900 font-semibold">
+                                ชำระครบแล้ว
                               </span>
                               <span className="font-bold text-[#581322]">
                                 ฿{formatTHB(agreedPrice)}
                               </span>
                             </div>
-
-                            <div className="flex items-center justify-between">
-                              <span className="text-purple-900/80 font-medium">
-                                สถานะมัดจำ:
-                              </span>
-                              {paymentStatus === "fully_paid" ? (
-                                <span className="px-1.5 py-0.2 rounded bg-sky-200/80 text-sky-950 border border-sky-300 font-semibold">
-                                  ชำระครบแล้ว
+                          ) : (
+                            <div className="p-2 rounded-xl bg-purple-50/70 border border-purple-200/80 flex items-center justify-between gap-2">
+                              <div className="text-xs">
+                                <span className="text-purple-900/80 font-medium">
+                                  {paymentStatus === "deposit_paid"
+                                    ? "คงเหลือตอนส่ง: "
+                                    : "ยังไม่มัดจำ: "}
                                 </span>
-                              ) : paymentStatus === "deposit_paid" ? (
-                                <span className="px-1.5 py-0.2 rounded bg-purple-200/80 text-purple-900 border border-purple-300 font-semibold">
-                                  มัดจำแล้ว ฿{formatTHB(depositAmount)}
+                                <span className="font-bold text-[#7b1e34]">
+                                  ฿{formatTHB(remainingBalance)}
                                 </span>
-                              ) : (
-                                <span className="px-1.5 py-0.2 rounded bg-pink-200/80 text-[#7b1e34] border border-pink-300 font-semibold">
-                                  ยังไม่เก็บมัดจำ
-                                </span>
-                              )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleMarkFullyPaid(task)}
+                                className="shrink-0 text-[11px] px-2 py-0.5 rounded-md bg-[#7b1e34] hover:bg-[#581322] text-white font-semibold transition"
+                              >
+                                รับครบ
+                              </button>
                             </div>
+                          )}
 
-                            {remainingBalance > 0 ? (
-                              <div className="pt-1 border-t border-purple-200/60 flex items-center justify-between gap-1">
-                                <span className="text-[#7b1e34] font-semibold">
-                                  เก็บที่เหลือตอนส่ง:
-                                </span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-bold text-[#7b1e34] text-xs">
-                                    ฿{formatTHB(remainingBalance)}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleMarkFullyPaid(task)}
-                                    className="text-[10px] px-1.5 py-0.5 rounded bg-[#7b1e34] hover:bg-[#581322] text-white font-semibold shadow-sm transition"
-                                    title="คลิกเมื่อเก็บเงินส่วนที่เหลือครบแล้ว"
-                                  >
-                                    ✓ รับครบ
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="pt-1 border-t border-purple-200/60 flex items-center justify-between text-sky-800 font-semibold">
-                                <span>ยอดคงเหลือตอนส่ง:</span>
-                                <span>฿0 (ครบแล้ว)</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Dates Info */}
-                          <div className="mt-2 pt-2 border-t border-pink-100 space-y-1 text-[11px]">
-                            {task.due_date && (
-                              <div className="flex items-center justify-between text-purple-800/80">
-                                <span>กำหนดเสร็จ:</span>
-                                <span>{task.due_date}</span>
-                              </div>
-                            )}
-                            <div
-                              className={`flex items-center justify-between ${
+                          {/* Row 4: Footer (Short Delivery Date + Status Dropdown on 1 clean row) */}
+                          <div className="pt-2 border-t border-pink-100 flex items-center justify-between gap-2">
+                            <span
+                              className={`text-[11px] shrink-0 ${
                                 dueState === "overdue"
                                   ? "text-[#7b1e34] font-bold"
-                                  : dueState === "due_today"
-                                  ? "text-amber-700 font-semibold"
-                                  : "text-[#581322] font-semibold"
+                                  : "text-purple-900/75 font-medium"
                               }`}
                             >
-                              <span className="inline-flex items-center gap-1">
-                                <Truck className="w-3 h-3 text-[#7b1e34]" />
-                                ถึงมือลูกค้า:
-                              </span>
-                              <span>{task.delivery_date || "ไม่ระบุวัน"}</span>
-                            </div>
-                          </div>
+                              ส่ง: {formatShortDate(task.delivery_date)}
+                            </span>
 
-                          {/* Touch-friendly Quick Status Switcher */}
-                          <div className="mt-2 pt-2 border-t border-pink-100 flex items-center gap-1.5">
                             <select
                               value={task.status}
                               onChange={(e) =>
@@ -1349,7 +1377,7 @@ export default function KanbanBoard() {
                                   e.target.value as TaskStatus
                                 )
                               }
-                              className="w-full bg-purple-50/90 border border-purple-200 text-[#4a1220] font-semibold rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-[#7b1e34]"
+                              className="bg-purple-50/90 border border-purple-200 text-[#4a1220] font-semibold rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#7b1e34]"
                             >
                               {COLUMNS.map((c) => (
                                 <option
@@ -1357,7 +1385,7 @@ export default function KanbanBoard() {
                                   value={c.id}
                                   className="bg-white"
                                 >
-                                  สถานะ: {c.title}
+                                  {c.title}
                                 </option>
                               ))}
                             </select>
@@ -1372,6 +1400,80 @@ export default function KanbanBoard() {
           })}
         </div>
       </main>
+
+      {/* Delivery Unpaid Confirmation Modal */}
+      {pendingDeliveryTask && (
+        <div className="fixed inset-0 z-50 bg-[#3d0d18]/55 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-[#7b1e34] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-[#7b1e34] border border-amber-300 mb-2">
+                  🚨 แจ้งเตือนยอดค้างชำระก่อนส่งงาน
+                </span>
+                <h3 className="text-base font-bold text-[#581322]">
+                  {pendingDeliveryTask.title}
+                </h3>
+                <p className="text-xs text-purple-900 mt-0.5">
+                  ลูกค้า: {pendingDeliveryTask.customer_name || "-"}
+                </p>
+              </div>
+              <button
+                onClick={() => setPendingDeliveryTask(null)}
+                className="text-purple-400 hover:text-[#7b1e34]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-purple-900">ราคาที่ตกลง:</span>
+                <span className="font-bold text-[#581322]">
+                  ฿{formatTHB(pendingDeliveryTask.agreed_price)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm pt-1 border-t border-rose-200">
+                <span className="font-bold text-[#7b1e34]">
+                  ยอดที่ต้องเก็บเพิ่มตอนส่ง:
+                </span>
+                <span className="font-bold text-[#7b1e34]">
+                  ฿{formatTHB(getRemainingBalance(pendingDeliveryTask))} บาท
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              คุณกำลังย้ายงานนี้ไปที่สถานะ <strong>&quot;ส่งแล้ว&quot;</strong>{" "}
+              ลูกค้าได้ชำระเงินส่วนที่เหลือครบเรียบร้อยแล้วหรือยังครับ?
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  const t = pendingDeliveryTask;
+                  setPendingDeliveryTask(null);
+                  await commitStatusChange(t.id, "delivered", true);
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-[#7b1e34] hover:bg-[#581322] text-white shadow-md transition"
+              >
+                รับเงินครบแล้ว + ย้ายไปส่งแล้ว
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const t = pendingDeliveryTask;
+                  setPendingDeliveryTask(null);
+                  await commitStatusChange(t.id, "delivered", false);
+                }}
+                className="py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 transition"
+              >
+                ยังไม่ได้รับ (ติดป้ายเตือนไว้)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit Task Modal */}
       {isTaskModalOpen && (
@@ -1485,10 +1587,9 @@ export default function KanbanBoard() {
               </div>
 
               {/* Price & Deposit Section */}
-              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-pink-50/90 via-purple-50/80 to-sky-50/90 border border-purple-200 space-y-3">
+              <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#581322] flex items-center gap-1.5">
-                    <Wallet className="w-4 h-4 text-[#7b1e34]" />
+                  <span className="text-xs font-bold text-[#581322]">
                     ข้อมูลราคาและการมัดจำ
                   </span>
                   <span className="text-xs text-purple-800 font-medium">
