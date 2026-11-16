@@ -49,6 +49,103 @@ export function saveQuotas(quotas: QuotaMap): void {
   localStorage.setItem(LOCAL_QUOTAS_KEY, JSON.stringify(quotas));
 }
 
+export async function fetchQuotas(): Promise<QuotaMap> {
+  const client = getSupabaseClient();
+  if (client) {
+    const { data, error } = await client
+      .from("size_quotas")
+      .select("work_size, max_quota");
+    if (!error && data && data.length > 0) {
+      const merged: QuotaMap = { ...getDefaultQuotas() };
+      data.forEach((row: { work_size: string; max_quota: number }) => {
+        if (row.work_size in merged) {
+          merged[row.work_size as WorkSize] = Number(row.max_quota) || 0;
+        }
+      });
+      saveQuotas(merged);
+      return merged;
+    }
+  }
+  return loadQuotas();
+}
+
+export async function updateQuota(
+  size: WorkSize,
+  maxQuota: number
+): Promise<void> {
+  const current = loadQuotas();
+  const updated = { ...current, [size]: maxQuota };
+  saveQuotas(updated);
+
+  const client = getSupabaseClient();
+  if (client) {
+    await client
+      .from("size_quotas")
+      .upsert(
+        {
+          work_size: size,
+          max_quota: maxQuota,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "work_size" }
+      );
+  }
+}
+
+export function subscribeToRealtimeChanges(onUpdate: () => void): () => void {
+  const client = getSupabaseClient();
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === LOCAL_TASKS_KEY || e.key === LOCAL_QUOTAS_KEY) {
+      onUpdate();
+    }
+  };
+  const handleVisibility = () => {
+    if (document.visibilityState === "visible") {
+      onUpdate();
+    }
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibility);
+  }
+
+  if (!client) {
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("storage", handleStorage);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      }
+    };
+  }
+
+  const channel = client
+    .channel(`red-roof-realtime-${Date.now()}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "tasks" },
+      () => {
+        onUpdate();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "size_quotas" },
+      () => {
+        onUpdate();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    client.removeChannel(channel);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    }
+  };
+}
+
 export function getDefaultSampleTasks(): Task[] {
   const ym = getCurrentYearMonth();
   const nowIso = new Date().toISOString();

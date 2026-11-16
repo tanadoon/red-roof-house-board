@@ -364,6 +364,27 @@
       const [supabaseKey, setSupabaseKey] = useState("");
       const [syncMessage, setSyncMessage] = useState(null);
 
+      const loadQuotasFromCloud = async () => {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data, error } = await client
+            .from("size_quotas")
+            .select("work_size, max_quota");
+          if (!error && data && data.length > 0) {
+            const merged = { ...getDefaultQuotas() };
+            data.forEach((row) => {
+              if (row.work_size in merged) {
+                merged[row.work_size] = Number(row.max_quota) || 0;
+              }
+            });
+            setQuotas(merged);
+            saveQuotas(merged);
+            return;
+          }
+        }
+        setQuotas(loadQuotas());
+      };
+
       const loadBoard = async (monthToLoad = selectedMonth) => {
         const client = getSupabaseClient();
         if (client) {
@@ -384,6 +405,7 @@
 
       useEffect(() => {
         setQuotas(loadQuotas());
+        loadQuotasFromCloud();
       }, []);
 
       useEffect(() => {
@@ -394,15 +416,68 @@
             const cfg = JSON.parse(raw);
             setSupabaseUrl(cfg.url || "");
             setSupabaseKey(cfg.anonKey || "");
+          } else {
+            setSupabaseUrl(DEFAULT_SUPABASE_URL);
+            setSupabaseKey(DEFAULT_SUPABASE_ANON_KEY);
           }
         } catch {}
+
+        const client = getSupabaseClient();
+        let channel = null;
+        if (client) {
+          channel = client
+            .channel(`red-roof-live-${selectedMonth}-${Date.now()}`)
+            .on(
+              "postgres_changes",
+              { event: "*", schema: "public", table: "tasks" },
+              () => {
+                loadBoard(selectedMonth);
+              }
+            )
+            .on(
+              "postgres_changes",
+              { event: "*", schema: "public", table: "size_quotas" },
+              () => {
+                loadQuotasFromCloud();
+              }
+            )
+            .subscribe();
+        }
+
+        const handleStorage = (e) => {
+          if (e.key === LOCAL_TASKS_KEY) loadBoard(selectedMonth);
+          if (e.key === LOCAL_QUOTAS_KEY) setQuotas(loadQuotas());
+        };
+        const handleVisibility = () => {
+          if (document.visibilityState === "visible") {
+            loadBoard(selectedMonth);
+            loadQuotasFromCloud();
+          }
+        };
+
+        window.addEventListener("storage", handleStorage);
+        document.addEventListener("visibilitychange", handleVisibility);
+
+        return () => {
+          if (client && channel) {
+            client.removeChannel(channel);
+          }
+          window.removeEventListener("storage", handleStorage);
+          document.removeEventListener("visibilitychange", handleVisibility);
+        };
       }, [selectedMonth]);
 
-      const handleQuotaChange = (size, newLimit) => {
+      const handleQuotaChange = async (size, newLimit) => {
         const safeLimit = Math.max(0, Math.min(999, Number(newLimit) || 0));
         const updated = { ...quotas, [size]: safeLimit };
         setQuotas(updated);
         saveQuotas(updated);
+        const client = getSupabaseClient();
+        if (client && storageMode === "supabase") {
+          await client
+            .from("size_quotas")
+            .upsert({ work_size: size, max_quota: safeLimit, updated_at: new Date().toISOString() }, { onConflict: "work_size" });
+        }
       };
 
       const filteredTasks = useMemo(() => {

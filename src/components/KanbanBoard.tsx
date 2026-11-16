@@ -31,13 +31,15 @@ import {
 import {
   createTask,
   deleteTask,
+  fetchQuotas,
   fetchTasksByMonth,
   getActiveSupabaseConfig,
   getDefaultQuotas,
   loadQuotas,
-  saveQuotas,
   saveRuntimeSupabaseConfig,
+  subscribeToRealtimeChanges,
   syncLocalTasksToSupabase,
+  updateQuota,
   updateTask,
 } from "@/lib/storage";
 
@@ -289,6 +291,7 @@ export default function KanbanBoard() {
 
   useEffect(() => {
     setQuotas(loadQuotas());
+    fetchQuotas().then(setQuotas).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -298,13 +301,29 @@ export default function KanbanBoard() {
       setSupabaseUrl(activeCfg.url);
       setSupabaseKey(activeCfg.anonKey);
     }
+
+    const unsubscribe = subscribeToRealtimeChanges(() => {
+      fetchTasksByMonth(selectedMonth)
+        .then((res) => {
+          setTasks(res.tasks);
+          setStorageMode(res.mode);
+        })
+        .catch(() => {});
+      fetchQuotas()
+        .then(setQuotas)
+        .catch(() => {});
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [selectedMonth]);
 
   const handleQuotaChange = (size: WorkSize, newLimit: number) => {
     const safeLimit = Math.max(0, Math.min(999, Number(newLimit) || 0));
     const updated = { ...quotas, [size]: safeLimit };
     setQuotas(updated);
-    saveQuotas(updated);
+    updateQuota(size, safeLimit).catch(() => {});
   };
 
   // Filtered tasks
