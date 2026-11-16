@@ -44,7 +44,7 @@
       { id: "framing", title: "ทำกรอบ", accent: "border-t-pink-400", headerBg: "bg-pink-100/75", badgeBg: "bg-pink-200/90 text-pink-900 border border-pink-300" },
       { id: "backdrop", title: "ทำแบคดรอป", accent: "border-t-violet-400", headerBg: "bg-violet-100/75", badgeBg: "bg-violet-200/90 text-violet-900 border border-violet-300" },
       { id: "ready_to_ship", title: "รอส่ง", accent: "border-t-[#9e2a45]", headerBg: "bg-rose-100/80", badgeBg: "bg-[#8c223b] text-white border border-[#70192d]" },
-      { id: "delivered", title: "ส่งแล้ว", accent: "border-t-sky-500", headerBg: "bg-gradient-to-r from-sky-100/80 to-emerald-100/70", badgeBg: "bg-emerald-100 text-emerald-800 border border-emerald-300" },
+      { id: "delivered", title: "ส่งแล้ว", accent: "border-t-sky-500", headerBg: "bg-sky-100/70", badgeBg: "bg-emerald-100 text-emerald-800 border border-emerald-300" },
     ];
 
     const PRIORITY_STYLES = {
@@ -668,7 +668,7 @@
                           : "bg-pink-200/90 text-[#581322] border-pink-300"
                       }`}
                     >
-                      {storageMode === "supabase" ? "☁️ Supabase Cloud" : "💾 LocalStorage Mode"}
+                      {storageMode === "supabase" ? "Supabase Cloud" : "LocalStorage Mode"}
                     </button>
                   </div>
                   <p className="text-[11px] sm:text-xs text-pink-200/90">ระบบแทรกกิ้งคิวงาน โควต้ารายเดือน มัดจำ และสถานะการจัดส่งลูกค้า</p>
@@ -705,11 +705,11 @@
                   onClick={() => setIsCloudModalOpen(true)}
                   className="px-3 py-2 rounded-xl text-xs font-medium bg-[#420d19]/70 hover:bg-[#420d19] text-pink-100 border border-pink-300/30"
                 >
-                  ⚙️ ตั้งค่า Cloud DB
+                  ตั้งค่า Cloud DB
                 </button>
                 <button
                   onClick={() => openCreateModal("todo")}
-                  className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-pink-200 via-pink-100 to-sky-200 hover:from-white hover:to-sky-100 text-[#581322] shadow-md shadow-black/25 transition"
+                  className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-pink-100 hover:bg-white text-[#581322] shadow-md shadow-black/25 transition"
                 >
                   + เพิ่มงานใหม่
                 </button>
@@ -723,7 +723,7 @@
             <div className="bg-white/90 backdrop-blur-sm border-2 border-[#7b1e34]/15 rounded-2xl p-3.5 sm:p-4 shadow-sm shadow-[#7b1e34]/5">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-lg bg-[#7b1e34] text-pink-100 flex items-center justify-center text-sm shadow-sm">📐</span>
+                  <span className="w-2 h-5 rounded-full bg-[#7b1e34]" />
                   <h2 className="text-xs sm:text-sm font-bold text-[#581322]">
                     โควต้างานแต่ละขนาดประจำเดือน ({formatThaiMonth(selectedMonth)})
                   </h2>
@@ -736,7 +736,7 @@
                       : "bg-purple-100/80 text-purple-900 border-purple-300 hover:bg-purple-200/80"
                   }`}
                 >
-                  {isEditingQuotas ? "✓ บันทึกโควต้าเรียบร้อย" : "✏️ ปรับจำนวนโควต้า"}
+                  {isEditingQuotas ? "บันทึกโควต้าเรียบร้อย" : "ปรับจำนวนโควต้า"}
                 </button>
               </div>
 
@@ -760,7 +760,7 @@
                           ? "bg-rose-100/70 border-rose-400 hover:border-[#7b1e34]"
                           : q.isNearFull
                           ? "bg-amber-50/90 border-amber-300 hover:border-amber-400"
-                          : "bg-gradient-to-br from-white via-pink-50/40 to-sky-50/50 border-purple-200 hover:border-[#7b1e34]/50"
+                          : "bg-white border-purple-200 hover:border-[#7b1e34]/50"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
@@ -791,10 +791,11 @@
                         </div>
                       </div>
 
-                      <div className="w-full h-2 bg-purple-100 rounded-full overflow-hidden">
+                      {/* Solid Color Progress Bar (No Gradient) */}
+                      <div className="w-full h-2 bg-pink-100/90 rounded-full overflow-hidden">
                         <div
                           className={`h-full transition-all duration-300 ${
-                            q.isFull ? "bg-[#7b1e34]" : q.isNearFull ? "bg-amber-400" : "bg-gradient-to-r from-[#7b1e34] via-pink-400 to-sky-400"
+                            q.isFull ? "bg-[#7b1e34]" : q.isNearFull ? "bg-amber-500" : "bg-[#8c243b]"
                           }`}
                           style={{ width: `${q.percent}%` }}
                         />
@@ -838,16 +839,16 @@
               </div>
             </div>
 
-            {/* Monthly Overview & Financial Metrics */}
+            {/* Monthly Overview & Financial Metrics (No Emojis except Overdue Alert when > 0) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-              <div className="bg-gradient-to-br from-white to-pink-50/90 border border-pink-200 rounded-2xl p-3.5 shadow-sm">
+              <div className="bg-white/90 border border-pink-200 rounded-2xl p-3.5 shadow-sm">
                 <div className="flex items-center justify-between text-xs text-[#7b1e34] font-medium mb-1.5">
                   <span>ส่งงานแล้วเดือนนี้</span>
                   <span className="font-bold text-[#7b1e34] text-sm">{stats.percent}%</span>
                 </div>
                 <div className="w-full h-2.5 bg-pink-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-[#7b1e34] via-pink-400 to-sky-400 transition-all duration-300"
+                    className="h-full bg-[#7b1e34] transition-all duration-300"
                     style={{ width: `${stats.percent}%` }}
                   />
                 </div>
@@ -856,43 +857,44 @@
                 </p>
               </div>
 
-              <div className="bg-gradient-to-br from-white to-sky-50/90 border border-sky-200 rounded-2xl p-3.5 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-sky-900/80 font-medium">ยอดรวมที่ตกลงเดือนนี้</p>
-                  <p className="text-lg sm:text-xl font-bold text-[#581322] mt-1">฿{formatTHB(stats.totalRevenue)}</p>
-                  <p className="text-[11px] text-sky-800 font-semibold mt-0.5">รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}</p>
-                </div>
-                <span className="w-10 h-10 rounded-xl bg-sky-200/80 flex items-center justify-center text-lg">💎</span>
+              <div className="bg-white/90 border border-sky-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+                <p className="text-xs text-sky-900/80 font-medium">ยอดรวมที่ตกลงเดือนนี้</p>
+                <p className="text-lg sm:text-xl font-bold text-[#581322] mt-1">฿{formatTHB(stats.totalRevenue)}</p>
+                <p className="text-[11px] text-sky-800 font-semibold mt-0.5">รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}</p>
               </div>
 
-              <div className="bg-gradient-to-br from-white to-purple-50/90 border border-purple-200 rounded-2xl p-3.5 shadow-sm flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-purple-900/80 font-medium">รอเก็บส่วนที่เหลือตอนส่ง</p>
-                  <p className="text-lg sm:text-xl font-bold text-[#7b1e34] mt-1">฿{formatTHB(stats.totalRemainingToCollect)}</p>
-                  <p className="text-[11px] text-purple-700 mt-0.5">ยอดค้างชำระเมื่อส่งมอบ</p>
-                </div>
-                <span className="w-10 h-10 rounded-xl bg-purple-200/80 flex items-center justify-center text-lg">🎀</span>
+              <div className="bg-white/90 border border-purple-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+                <p className="text-xs text-purple-900/80 font-medium">รอเก็บส่วนที่เหลือตอนส่ง</p>
+                <p className="text-lg sm:text-xl font-bold text-[#7b1e34] mt-1">฿{formatTHB(stats.totalRemainingToCollect)}</p>
+                <p className="text-[11px] text-purple-700 mt-0.5">ยอดค้างชำระเมื่อส่งมอบ</p>
               </div>
 
+              {/* Overdue Card: Dimmed & No Emoji when stats.overdue === 0 */}
               <div
-                onClick={() => setOnlyOverdue((v) => !v)}
-                className={`cursor-pointer rounded-2xl p-3.5 flex items-center justify-between border shadow-sm transition ${
+                onClick={() => {
+                  if (stats.overdue > 0 || onlyOverdue) {
+                    setOnlyOverdue((v) => !v);
+                  }
+                }}
+                className={`rounded-2xl p-3.5 flex items-center justify-between border transition ${
                   onlyOverdue
-                    ? "bg-[#7b1e34] text-white border-[#581322]"
+                    ? "cursor-pointer bg-[#7b1e34] text-white border-[#581322] shadow-sm"
                     : stats.overdue > 0
-                    ? "bg-rose-50/90 border-rose-300"
-                    : "bg-gradient-to-br from-white to-sky-50/60 border-sky-200"
+                    ? "cursor-pointer bg-rose-50/95 border-rose-300 hover:border-[#7b1e34] shadow-sm"
+                    : "bg-white/45 border-pink-200/50 opacity-55"
                 }`}
               >
                 <div>
-                  <p className={`text-xs font-medium ${onlyOverdue ? "text-pink-100" : "text-[#581322]/80"}`}>
+                  <p className={`text-xs font-medium ${onlyOverdue ? "text-pink-100" : stats.overdue > 0 ? "text-[#581322]" : "text-slate-400"}`}>
                     เลยกำหนดส่ง {onlyOverdue ? "• กรองอยู่" : ""}
                   </p>
-                  <p className={`text-xl sm:text-2xl font-bold mt-1 ${onlyOverdue ? "text-white" : stats.overdue > 0 ? "text-[#7b1e34]" : "text-sky-800"}`}>
+                  <p className={`text-xl sm:text-2xl font-bold mt-1 ${onlyOverdue ? "text-white" : stats.overdue > 0 ? "text-[#7b1e34]" : "text-slate-400"}`}>
                     {stats.overdue} งาน
                   </p>
                 </div>
-                <span className="text-2xl">{stats.overdue > 0 ? "🚨" : "✨"}</span>
+                {stats.overdue > 0 && (
+                  <span className="text-2xl">🚨</span>
+                )}
               </div>
             </div>
 
@@ -903,7 +905,7 @@
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="🔍 ค้นหาชื่องาน, ชื่อลูกค้า หรือรายละเอียด..."
+                  placeholder="ค้นหาชื่องาน, ชื่อลูกค้า หรือรายละเอียด..."
                   className="bg-pink-50/50 border border-pink-200 rounded-xl px-3.5 py-1.5 text-xs sm:text-sm text-[#4a1220] placeholder:text-purple-400 flex-1 min-w-[200px] max-w-sm focus:outline-none focus:border-[#7b1e34] focus:bg-white"
                 />
 
@@ -1080,12 +1082,12 @@
                                   </span>
                                   {isCarriedOver && (
                                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
-                                      📌 ยกมาจาก {task.month}
+                                      ยกมาจาก {task.month}
                                     </span>
                                   )}
                                   {dueState === "overdue" && (
                                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#7b1e34] text-white animate-pulse">
-                                      ⚠️ เลยกำหนด!
+                                      🚨 เลยกำหนด!
                                     </span>
                                   )}
                                 </div>
@@ -1108,7 +1110,7 @@
 
                               {task.customer_name && (
                                 <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-100/90 border border-sky-200 text-xs text-sky-900 font-semibold max-w-full">
-                                  <span className="truncate">👤 {task.customer_name}</span>
+                                  <span className="truncate">ลูกค้า: {task.customer_name}</span>
                                 </div>
                               )}
 
@@ -1117,7 +1119,7 @@
                               )}
 
                               {/* Price & Deposit Box */}
-                              <div className="mt-2.5 p-2 rounded-lg bg-gradient-to-br from-pink-50/90 via-purple-50/70 to-sky-50/90 border border-purple-200/80 space-y-1 text-[11px]">
+                              <div className="mt-2.5 p-2 rounded-lg bg-purple-50/70 border border-purple-200/80 space-y-1 text-[11px]">
                                 <div className="flex items-center justify-between">
                                   <span className="text-purple-900/80 font-medium">ราคาที่ตกลง:</span>
                                   <span className="font-bold text-[#581322]">฿{formatTHB(agreedPrice)}</span>
@@ -1153,7 +1155,7 @@
                                         className="text-[10px] px-1.5 py-0.5 rounded bg-[#7b1e34] hover:bg-[#581322] text-white font-semibold shadow-sm transition"
                                         title="คลิกเมื่อเก็บเงินส่วนที่เหลือครบแล้ว"
                                       >
-                                        ✓ รับครบ
+                                        รับครบ
                                       </button>
                                     </div>
                                   </div>
@@ -1168,7 +1170,7 @@
                               <div className="mt-2 pt-2 border-t border-pink-100 space-y-1 text-[11px]">
                                 {task.due_date && (
                                   <div className="flex items-center justify-between text-purple-800/80">
-                                    <span>🛠️ กำหนดเสร็จ:</span>
+                                    <span>กำหนดเสร็จ:</span>
                                     <span>{task.due_date}</span>
                                   </div>
                                 )}
@@ -1179,7 +1181,7 @@
                                     ? "text-amber-700 font-semibold"
                                     : "text-[#581322] font-semibold"
                                 }`}>
-                                  <span>🚚 ถึงมือลูกค้า:</span>
+                                  <span>ถึงมือลูกค้า:</span>
                                   <span>{task.delivery_date || "ไม่ระบุวัน"}</span>
                                 </div>
                               </div>
@@ -1294,9 +1296,9 @@
                   </div>
 
                   {/* Price & Deposit Box */}
-                  <div className="p-3.5 rounded-2xl bg-gradient-to-br from-pink-50/90 via-purple-50/80 to-sky-50/90 border border-purple-200 space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-[#581322]">🌷 ข้อมูลราคาและการมัดจำ</span>
+                      <span className="text-xs font-bold text-[#581322]">ข้อมูลราคาและการมัดจำ</span>
                       <span className="text-xs text-purple-800 font-medium">คำนวณยอดคงเหลืออัตโนมัติ</span>
                     </div>
 
@@ -1455,7 +1457,7 @@
             <div className="fixed inset-0 z-50 bg-[#3d0d18]/50 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-white border-2 border-[#7b1e34]/20 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-pink-200">
-                  <h2 className="text-base font-bold text-[#581322]">☁️ ตั้งค่าฐานข้อมูล Supabase (Hybrid Mode)</h2>
+                  <h2 className="text-base font-bold text-[#581322]">ตั้งค่าฐานข้อมูล Supabase (Hybrid Mode)</h2>
                   <button onClick={() => setIsCloudModalOpen(false)} className="text-purple-400 hover:text-[#7b1e34]">✕</button>
                 </div>
                 <form onSubmit={handleSaveCloudSettings} className="space-y-3">
@@ -1490,7 +1492,7 @@
                       onClick={handleSyncLocalToCloud}
                       className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-sky-100 text-sky-900 border border-sky-300"
                     >
-                      ⬆️ ซิงค์งานจากเครื่องขึ้น Supabase
+                      ซิงค์งานจากเครื่องขึ้น Supabase
                     </button>
                     <div className="flex gap-2">
                       <button

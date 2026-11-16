@@ -793,15 +793,15 @@ export default function KanbanBoard() {
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="w-full h-2 bg-purple-100 rounded-full overflow-hidden">
+                  {/* Solid Color Progress Bar (No Gradient) */}
+                  <div className="w-full h-2 bg-pink-100/90 rounded-full overflow-hidden">
                     <div
                       className={`h-full transition-all duration-300 ${
                         q.isFull
                           ? "bg-[#7b1e34]"
                           : q.isNearFull
-                          ? "bg-amber-400"
-                          : "bg-gradient-to-r from-[#7b1e34] via-pink-400 to-sky-400"
+                          ? "bg-amber-500"
+                          : "bg-[#8c243b]"
                       }`}
                       style={{ width: `${q.percent}%` }}
                     />
@@ -852,8 +852,8 @@ export default function KanbanBoard() {
 
         {/* Overall Progress & Financial Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-          {/* Card 1: Pastel Pink & Burgundy */}
-          <div className="bg-gradient-to-br from-white to-pink-50/90 border border-pink-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+          {/* Card 1: Solid Progress Bar */}
+          <div className="bg-white/90 border border-pink-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-[#7b1e34] font-medium mb-1.5">
               <span>ส่งงานแล้วเดือนนี้</span>
               <span className="font-bold text-[#7b1e34] text-sm">
@@ -862,7 +862,7 @@ export default function KanbanBoard() {
             </div>
             <div className="w-full h-2.5 bg-pink-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-[#7b1e34] via-pink-400 to-sky-400 transition-all duration-300"
+                className="h-full bg-[#7b1e34] transition-all duration-300"
                 style={{ width: `${stats.percent}%` }}
               />
             </div>
@@ -872,56 +872,54 @@ export default function KanbanBoard() {
           </div>
 
           {/* Card 2: Baby Blue Accent */}
-          <div className="bg-gradient-to-br from-white to-sky-50/90 border border-sky-200 rounded-2xl p-3.5 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-xs text-sky-900/80 font-medium">
-                ยอดรวมที่ตกลงเดือนนี้
-              </p>
-              <p className="text-lg sm:text-xl font-bold text-[#581322] mt-1">
-                ฿{formatTHB(stats.totalRevenue)}
-              </p>
-              <p className="text-[11px] text-sky-800 font-semibold mt-0.5">
-                รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}
-              </p>
-            </div>
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-200/80 flex items-center justify-center text-sky-900 shrink-0">
-              <Wallet className="w-5 h-5" />
-            </div>
+          <div className="bg-white/90 border border-sky-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+            <p className="text-xs text-sky-900/80 font-medium">
+              ยอดรวมที่ตกลงเดือนนี้
+            </p>
+            <p className="text-lg sm:text-xl font-bold text-[#581322] mt-1">
+              ฿{formatTHB(stats.totalRevenue)}
+            </p>
+            <p className="text-[11px] text-sky-800 font-semibold mt-0.5">
+              รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}
+            </p>
           </div>
 
           {/* Card 3: Pastel Purple Accent */}
-          <div className="bg-gradient-to-br from-white to-purple-50/90 border border-purple-200 rounded-2xl p-3.5 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-xs text-purple-900/80 font-medium">
-                รอเก็บส่วนที่เหลือตอนส่ง
-              </p>
-              <p className="text-lg sm:text-xl font-bold text-[#7b1e34] mt-1">
-                ฿{formatTHB(stats.totalRemainingToCollect)}
-              </p>
-              <p className="text-[11px] text-purple-700 mt-0.5">
-                ยอดค้างชำระรวมของเดือนนี้
-              </p>
-            </div>
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-200/80 flex items-center justify-center text-purple-900 shrink-0">
-              <Banknote className="w-5 h-5" />
-            </div>
+          <div className="bg-white/90 border border-purple-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+            <p className="text-xs text-purple-900/80 font-medium">
+              รอเก็บส่วนที่เหลือตอนส่ง
+            </p>
+            <p className="text-lg sm:text-xl font-bold text-[#7b1e34] mt-1">
+              ฿{formatTHB(stats.totalRemainingToCollect)}
+            </p>
+            <p className="text-[11px] text-purple-700 mt-0.5">
+              ยอดค้างชำระรวมของเดือนนี้
+            </p>
           </div>
 
-          {/* Card 4: Burgundy / Overdue Status */}
+          {/* Card 4: Overdue Status (Dimmed & No Icon when 0) */}
           <div
-            onClick={() => setOnlyOverdue((v) => !v)}
-            className={`cursor-pointer rounded-2xl p-3.5 flex items-center justify-between border shadow-sm transition ${
+            onClick={() => {
+              if (stats.overdue > 0 || onlyOverdue) {
+                setOnlyOverdue((v) => !v);
+              }
+            }}
+            className={`rounded-2xl p-3.5 flex items-center justify-between border transition ${
               onlyOverdue
-                ? "bg-[#7b1e34] text-white border-[#581322]"
+                ? "cursor-pointer bg-[#7b1e34] text-white border-[#581322] shadow-sm"
                 : stats.overdue > 0
-                ? "bg-rose-50/90 border-rose-300 hover:border-[#7b1e34]"
-                : "bg-gradient-to-br from-white to-sky-50/60 border-sky-200"
+                ? "cursor-pointer bg-rose-50/95 border-rose-300 hover:border-[#7b1e34] shadow-sm"
+                : "bg-white/45 border-pink-200/50 opacity-55"
             }`}
           >
             <div>
               <p
                 className={`text-xs font-medium flex items-center gap-1 ${
-                  onlyOverdue ? "text-pink-100" : "text-[#581322]/80"
+                  onlyOverdue
+                    ? "text-pink-100"
+                    : stats.overdue > 0
+                    ? "text-[#581322]"
+                    : "text-slate-400"
                 }`}
               >
                 <span>เลยกำหนดส่ง</span>
@@ -937,27 +935,13 @@ export default function KanbanBoard() {
                     ? "text-white"
                     : stats.overdue > 0
                     ? "text-[#7b1e34]"
-                    : "text-sky-800"
+                    : "text-slate-400"
                 }`}
               >
                 {stats.overdue} งาน
               </p>
             </div>
-            <div
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                onlyOverdue
-                  ? "bg-white/20 text-white"
-                  : stats.overdue > 0
-                  ? "bg-[#7b1e34]/15 text-[#7b1e34]"
-                  : "bg-sky-200/70 text-sky-800"
-              }`}
-            >
-              {stats.overdue > 0 ? (
-                <AlertTriangle className="w-5 h-5" />
-              ) : (
-                <CheckCircle2 className="w-5 h-5" />
-              )}
-            </div>
+            {stats.overdue > 0 && <span className="text-2xl">🚨</span>}
           </div>
         </div>
 
