@@ -9,11 +9,28 @@ export type TaskStatus =
 
 export type TaskPriority = "low" | "medium" | "high";
 
-export type WorkSize = "A2" | "A3" | "A4" | "A5";
+export type WorkSize =
+  | "A2"
+  | "A3"
+  | "A4"
+  | "A5"
+  | "10x15 cm"
+  | "20x25 cm"
+  | "25x25 cm"
+  | "35x35 cm";
 
 export type PaymentStatus = "unpaid_deposit" | "deposit_paid" | "fully_paid";
 
-export const DEFAULT_WORK_SIZES: WorkSize[] = ["A2", "A3", "A4", "A5"];
+export const DEFAULT_WORK_SIZES: WorkSize[] = [
+  "A2",
+  "A3",
+  "A4",
+  "A5",
+  "10x15 cm",
+  "20x25 cm",
+  "25x25 cm",
+  "35x35 cm",
+];
 
 export type QuotaMap = Record<WorkSize, number>;
 
@@ -21,16 +38,18 @@ export interface Task {
   id: string;
   title: string;
   customer_name: string;
+  customer_phone: string; // เบอร์โทรศัพท์ลูกค้า (บังคับใส่)
+  shipping_address: string; // ที่อยู่จัดส่งของลูกค้า
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
   work_size: WorkSize;
-  agreed_price: number; // ราคาที่ตกลงกับลูกค้า (บาท)
-  payment_status: PaymentStatus; // สถานะการชำระเงิน / มัดจำ
-  deposit_amount: number; // ยอดมัดจำที่เก็บมาแล้ว (บาท)
+  agreed_price: number;
+  payment_status: PaymentStatus;
+  deposit_amount: number;
   month: string; // Format: "YYYY-MM"
-  due_date: string | null; // วันครบกำหนดทำเสร็จ ("YYYY-MM-DD")
-  delivery_date: string | null; // วันที่ต้องส่งถึงมือลูกค้า ("YYYY-MM-DD")
+  due_date: string | null;
+  delivery_date: string | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -39,6 +58,8 @@ export interface Task {
 export interface CreateTaskInput {
   title: string;
   customer_name: string;
+  customer_phone: string;
+  shipping_address: string;
   description: string;
   status: TaskStatus;
   priority: TaskPriority;

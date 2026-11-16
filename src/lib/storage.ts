@@ -8,9 +8,13 @@ import {
   WorkSize,
 } from "@/types/task";
 
-const LOCAL_TASKS_KEY = "red_roof_house_tasks_v3";
-const LOCAL_QUOTAS_KEY = "red_roof_house_quotas_v1";
+const LOCAL_TASKS_KEY = "red_roof_house_tasks_v4";
+const LOCAL_QUOTAS_KEY = "red_roof_house_quotas_v2";
 const LOCAL_SUPABASE_CONFIG_KEY = "kanban_supabase_config_v1";
+
+const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsaHhzanZvcGJweHdoeHlvY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NDU3MDQsImV4cCI6MjExMDQyMTcwNH0.HD65cftiSeOvnaZNU4ahmDGwspct3yshwvquiC6sHV0";
 
 function getCurrentYearMonth(): string {
   const now = new Date();
@@ -25,6 +29,10 @@ export function getDefaultQuotas(): QuotaMap {
     A3: 10,
     A4: 10,
     A5: 10,
+    "10x15 cm": 10,
+    "20x25 cm": 10,
+    "25x25 cm": 10,
+    "35x35 cm": 10,
   };
 }
 
@@ -154,10 +162,12 @@ export function getDefaultSampleTasks(): Task[] {
       id: "sample-0",
       title: "ฉากร้านดอกไม้ของขวัญวันครบรอบ",
       customer_name: "คุณแพรว (Line: praew_p)",
+      customer_phone: "081-234-5678",
+      shipping_address: "123/45 ซ.สุขุมวิท 24 แขวงคลองตัน เขตคลองเตย กทม. 10110",
       description: "เพิ่งสรุปบรีฟ รอคิวเริ่มวาดดราฟ",
       status: "todo",
       priority: "medium",
-      work_size: "A4",
+      work_size: "20x25 cm",
       agreed_price: 2500,
       payment_status: "unpaid_deposit",
       deposit_amount: 0,
@@ -172,6 +182,8 @@ export function getDefaultSampleTasks(): Task[] {
       id: "sample-1",
       title: "งานป๊อปอัพคู่รักแต่งงาน + สัตว์เลี้ยง",
       customer_name: "คุณพลอย (IG: ploy_wed)",
+      customer_phone: "089-456-1234",
+      shipping_address: "88 หมู่บ้านแกรนด์ ถ.ราชพฤกษ์ ต.บางรักน้อย อ.เมือง จ.นนทบุรี 11000",
       description: "โทนสีพาสเทล เพิ่มน้องหมาคอร์กี้ด้านหน้า 2 ตัว",
       status: "draft",
       priority: "high",
@@ -190,10 +202,12 @@ export function getDefaultSampleTasks(): Task[] {
       id: "sample-2",
       title: "กรอบรูปบ้านหลังคาแดง ของขวัญขึ้นบ้านใหม่",
       customer_name: "คุณนนท์ (Line: non_k)",
+      customer_phone: "092-888-9999",
+      shipping_address: "55/9 คอนโดเดอะไลน์ พหลโยธิน แขวงจอมพล เขตจตุจักร กทม. 10900",
       description: "เน้นรายละเอียดสวนหน้าบ้านและป้ายชื่อบ้าน",
       status: "cutting",
       priority: "high",
-      work_size: "A2",
+      work_size: "35x35 cm",
       agreed_price: 5200,
       payment_status: "deposit_paid",
       deposit_amount: 2500,
@@ -208,6 +222,8 @@ export function getDefaultSampleTasks(): Task[] {
       id: "sample-3",
       title: "งานวันเกิดธีมคาเฟ่ญี่ปุ่น",
       customer_name: "คุณมายด์",
+      customer_phone: "086-777-3322",
+      shipping_address: "19/2 ถ.นิมมานเหมินท์ ต.สุเทพ อ.เมือง จ.เชียงใหม่ 50200",
       description: "กรอบไม้สีอ่อน ติดไฟแฟรี่ไลท์ด้านใน",
       status: "framing",
       priority: "medium",
@@ -226,10 +242,12 @@ export function getDefaultSampleTasks(): Task[] {
       id: "sample-4",
       title: "ของขวัญรับปริญญา มศว",
       customer_name: "คุณเจมส์",
+      customer_phone: "095-111-2233",
+      shipping_address: "42 ซ.อารีย์ 1 แขวงสามเสนใน เขตพญาไท กทม. 10400",
       description: "ฉากหลังตึกคณะ พร้อมช่อดอกไม้จิ๋ว",
       status: "backdrop",
       priority: "medium",
-      work_size: "A4",
+      work_size: "25x25 cm",
       agreed_price: 2400,
       payment_status: "deposit_paid",
       deposit_amount: 1000,
@@ -244,10 +262,12 @@ export function getDefaultSampleTasks(): Task[] {
       id: "sample-5",
       title: "มินิการ์ดครบรอบแต่งงาน",
       customer_name: "คุณแอน",
+      customer_phone: "084-555-6677",
+      shipping_address: "101/8 หมู่ 4 ต.ช้างเผือก อ.เมือง จ.เชียงใหม่ 50300",
       description: "แพ็คกล่องของขวัญผูกโบว์สีแดง พร้อมการ์ดอวยพร",
       status: "ready_to_ship",
       priority: "low",
-      work_size: "A5",
+      work_size: "10x15 cm",
       agreed_price: 1500,
       payment_status: "deposit_paid",
       deposit_amount: 750,
@@ -262,6 +282,8 @@ export function getDefaultSampleTasks(): Task[] {
       id: "sample-6",
       title: "ฉากครอบครัว 5 คน ทริปภูเขา",
       customer_name: "คุณกิตติ",
+      customer_phone: "081-999-8877",
+      shipping_address: "77/3 ถ.มิตรภาพ ต.ในเมือง อ.เมือง จ.ขอนแก่น 40000",
       description: "ส่ง EMS แล้ว แจ้งเลขพัสดุเรียบร้อย",
       status: "delivered",
       priority: "medium",
@@ -278,10 +300,6 @@ export function getDefaultSampleTasks(): Task[] {
     },
   ];
 }
-
-const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
-const DEFAULT_SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsaHhzanZvcGJweHdoeHlvY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NDU3MDQsImV4cCI6MjExMDQyMTcwNH0.HD65cftiSeOvnaZNU4ahmDGwspct3yshwvquiC6sHV0";
 
 export function getActiveSupabaseConfig(): SupabaseConfig | null {
   const envUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -316,21 +334,6 @@ export function getActiveSupabaseConfig(): SupabaseConfig | null {
   };
 }
 
-export function saveRuntimeSupabaseConfig(config: SupabaseConfig | null): void {
-  if (typeof window === "undefined") return;
-  if (!config || !config.url.trim() || !config.anonKey.trim()) {
-    localStorage.removeItem(LOCAL_SUPABASE_CONFIG_KEY);
-  } else {
-    localStorage.setItem(
-      LOCAL_SUPABASE_CONFIG_KEY,
-      JSON.stringify({
-        url: config.url.trim(),
-        anonKey: config.anonKey.trim(),
-      })
-    );
-  }
-}
-
 export function getSupabaseClient(): SupabaseClient | null {
   const cfg = getActiveSupabaseConfig();
   if (!cfg) return null;
@@ -361,12 +364,6 @@ export function saveLocalTasks(tasks: Task[]): void {
   localStorage.setItem(LOCAL_TASKS_KEY, JSON.stringify(tasks));
 }
 
-/**
- * ดึงงานประจำเดือนที่เลือก:
- * - งานที่สร้างในเดือนนั้น (month === targetMonth)
- * - งานจากเดือนก่อนหน้า (month < targetMonth) ที่ยังไม่ได้ส่ง (status !== 'delivered') จะตามมาเดือนใหม่ด้วยอัตโนมัติ
- * - ส่วนงานที่ส่งแล้ว (status === 'delivered') จะค้างอยู่ที่เดือนของตัวเองเท่านั้น
- */
 function filterTasksWithCarryOver(allTasks: Task[], targetMonth: string): Task[] {
   return allTasks.filter(
     (t) =>
@@ -419,6 +416,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
         {
           title: input.title,
           customer_name: input.customer_name,
+          customer_phone: input.customer_phone,
+          shipping_address: input.shipping_address,
           description: input.description,
           status: input.status,
           priority: input.priority,
@@ -449,6 +448,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
         : `task-${Date.now()}`,
     title: input.title,
     customer_name: input.customer_name,
+    customer_phone: input.customer_phone,
+    shipping_address: input.shipping_address,
     description: input.description,
     status: input.status,
     priority: input.priority,
@@ -524,39 +525,4 @@ export async function deleteTask(id: string): Promise<void> {
 
   const allLocal = loadLocalTasks();
   saveLocalTasks(allLocal.filter((t) => t.id !== id));
-}
-
-export async function syncLocalTasksToSupabase(): Promise<{ uploaded: number }> {
-  const client = getSupabaseClient();
-  if (!client) {
-    throw new Error("ยังไม่ได้ตั้งค่าการเชื่อมต่อ Supabase");
-  }
-
-  const localTasks = loadLocalTasks();
-  if (localTasks.length === 0) {
-    return { uploaded: 0 };
-  }
-
-  const payload = localTasks.map((t, index) => ({
-    title: t.title,
-    customer_name: t.customer_name || "",
-    description: t.description,
-    status: t.status,
-    priority: t.priority,
-    work_size: t.work_size || ("A4" as WorkSize),
-    agreed_price: Number(t.agreed_price) || 0,
-    payment_status: t.payment_status || "unpaid_deposit",
-    deposit_amount: Number(t.deposit_amount) || 0,
-    month: t.month,
-    due_date: t.due_date || null,
-    delivery_date: t.delivery_date || null,
-    position: index,
-  }));
-
-  const { data, error } = await client.from("tasks").insert(payload).select();
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return { uploaded: data?.length ?? payload.length };
 }

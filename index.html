@@ -13,8 +13,8 @@
   <style>
     body {
       font-family: 'IBM Plex Sans Thai', sans-serif;
-      background: linear-gradient(135deg, #fdf2f4 0%, #f6f0ff 50%, #e8f4fe 100%);
-      color: #3d1320;
+      background: linear-gradient(135deg, #fdf7f2 0%, #f9e1d3 45%, #f4effa 100%);
+      color: #4a3539;
     }
     .no-scrollbar::-webkit-scrollbar {
       display: none;
@@ -25,39 +25,114 @@
     }
   </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-[#fdf2f4] via-[#f6f0ff] to-[#e8f4fe] text-[#3d1320]">
+<body class="min-h-screen text-[#4a3539]">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    const LOCAL_TASKS_KEY = "red_roof_house_tasks_v3";
-    const LOCAL_QUOTAS_KEY = "red_roof_house_quotas_v1";
+    const LOCAL_TASKS_KEY = "red_roof_house_tasks_v4";
+    const LOCAL_QUOTAS_KEY = "red_roof_house_quotas_v2";
     const LOCAL_SUPABASE_CONFIG_KEY = "kanban_supabase_config_v1";
 
-    const DEFAULT_WORK_SIZES = ["A2", "A3", "A4", "A5"];
+    const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
+    const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsaHhzanZvcGJweHdoeHlvY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NDU3MDQsImV4cCI6MjExMDQyMTcwNH0.HD65cftiSeOvnaZNU4ahmDGwspct3yshwvquiC6sHV0";
 
+    const DEFAULT_WORK_SIZES = [
+      "A2",
+      "A3",
+      "A4",
+      "A5",
+      "10x15 cm",
+      "20x25 cm",
+      "25x25 cm",
+      "35x35 cm",
+    ];
+
+    /**
+     * Flow 7 เลนตามที่กำหนด:
+     * ยังไม่เริ่ม -> วาดดราฟ -> รับดราฟแล้ว -> ทำกรอบ -> ทำคน -> รอส่ง -> ส่งแล้ว
+     * พาเลตสี: #ca5151, #f9e1d3, #cc8867, #77585e, #789ea5, #ffd590, #ffc0b8 + Pastel Purple (#d8b4fe / #f3e8ff)
+     */
     const COLUMNS = [
-      { id: "todo", title: "To Do", accent: "border-t-[#7b1e34]", headerBg: "bg-[#7b1e34]/10", badgeBg: "bg-[#7b1e34] text-pink-50 border border-[#611527]" },
-      { id: "draft", title: "วาดดราฟ", accent: "border-t-purple-400", headerBg: "bg-purple-100/75", badgeBg: "bg-purple-200/90 text-purple-900 border border-purple-300" },
-      { id: "cutting", title: "ตัดกระดาษ", accent: "border-t-sky-400", headerBg: "bg-sky-100/80", badgeBg: "bg-sky-200/90 text-sky-900 border border-sky-300" },
-      { id: "framing", title: "ทำกรอบ", accent: "border-t-pink-400", headerBg: "bg-pink-100/75", badgeBg: "bg-pink-200/90 text-pink-900 border border-pink-300" },
-      { id: "backdrop", title: "ทำแบคดรอป", accent: "border-t-violet-400", headerBg: "bg-violet-100/75", badgeBg: "bg-violet-200/90 text-violet-900 border border-violet-300" },
-      { id: "ready_to_ship", title: "รอส่ง", accent: "border-t-[#9e2a45]", headerBg: "bg-rose-100/80", badgeBg: "bg-[#8c223b] text-white border border-[#70192d]" },
-      { id: "delivered", title: "ส่งแล้ว", accent: "border-t-sky-500", headerBg: "bg-sky-100/70", badgeBg: "bg-emerald-100 text-emerald-800 border border-emerald-300" },
+      {
+        id: "todo",
+        title: "ยังไม่เริ่ม",
+        accent: "border-t-[#77585e]",
+        headerBg: "bg-[#77585e]/10",
+        badgeBg: "bg-[#77585e] text-white border border-[#5f454a]",
+      },
+      {
+        id: "draft",
+        title: "วาดดราฟ",
+        accent: "border-t-[#b794f4]",
+        headerBg: "bg-[#f3e8ff]/90",
+        badgeBg: "bg-[#e9d5ff] text-[#5b3b8c] border border-[#d8b4fe]",
+      },
+      {
+        id: "cutting",
+        title: "รับดราฟแล้ว",
+        accent: "border-t-[#789ea5]",
+        headerBg: "bg-[#789ea5]/15",
+        badgeBg: "bg-[#789ea5] text-white border border-[#61838a]",
+      },
+      {
+        id: "framing",
+        title: "ทำกรอบ",
+        accent: "border-t-[#cc8867]",
+        headerBg: "bg-[#cc8867]/15",
+        badgeBg: "bg-[#cc8867] text-white border border-[#b37252]",
+      },
+      {
+        id: "backdrop",
+        title: "ทำคน",
+        accent: "border-t-[#ffc0b8]",
+        headerBg: "bg-[#ffc0b8]/30",
+        badgeBg: "bg-[#ffc0b8] text-[#77585e] border border-[#f2a79e]",
+      },
+      {
+        id: "ready_to_ship",
+        title: "รอส่ง",
+        accent: "border-t-[#ffd590]",
+        headerBg: "bg-[#ffd590]/35",
+        badgeBg: "bg-[#ffd590] text-[#77585e] border border-[#eec073]",
+      },
+      {
+        id: "delivered",
+        title: "ส่งแล้ว",
+        accent: "border-t-[#ca5151]",
+        headerBg: "bg-[#ca5151]/12",
+        badgeBg: "bg-[#ca5151] text-white border border-[#b03e3e]",
+      },
     ];
 
     const PRIORITY_STYLES = {
-      high: { label: "High", badge: "bg-[#7b1e34]/15 text-[#7b1e34] border-[#7b1e34]/30 font-semibold", dot: "bg-[#7b1e34]" },
-      medium: { label: "Medium", badge: "bg-purple-100 text-purple-800 border-purple-300", dot: "bg-purple-500" },
-      low: { label: "Low", badge: "bg-sky-100 text-sky-800 border-sky-300", dot: "bg-sky-500" },
+      high: {
+        label: "High",
+        badge: "bg-[#ca5151]/15 text-[#ca5151] border-[#ca5151]/35 font-semibold",
+        dot: "bg-[#ca5151]",
+      },
+      medium: {
+        label: "Medium",
+        badge: "bg-[#f3e8ff] text-[#6b46c1] border-[#d8b4fe]",
+        dot: "bg-[#9f7aea]",
+      },
+      low: {
+        label: "Low",
+        badge: "bg-[#789ea5]/20 text-[#4a6b72] border-[#789ea5]/40",
+        dot: "bg-[#789ea5]",
+      },
     };
 
     const SIZE_BADGE_STYLES = {
-      A2: "bg-[#7b1e34] text-pink-50 border-[#5e1426]",
-      A3: "bg-sky-100 text-sky-900 border-sky-300",
-      A4: "bg-pink-100 text-[#7b1e34] border-pink-300",
-      A5: "bg-purple-100 text-purple-900 border-purple-300",
+      "A2": "bg-[#ca5151] text-white border-[#b03e3e]",
+      "A3": "bg-[#789ea5] text-white border-[#60848b]",
+      "A4": "bg-[#cc8867] text-white border-[#b57253]",
+      "A5": "bg-[#77585e] text-white border-[#5e4449]",
+      "10x15 cm": "bg-[#f3e8ff] text-[#5b3b8c] border-[#d8b4fe]",
+      "20x25 cm": "bg-[#ffc0b8]/80 text-[#5e3a3a] border-[#f2a79e]",
+      "25x25 cm": "bg-[#ffd590]/85 text-[#664920] border-[#e8bc72]",
+      "35x35 cm": "bg-[#f9e1d3] text-[#77585e] border-[#e6c3af]",
     };
 
     const THAI_MONTHS = [
@@ -123,7 +198,16 @@
     }
 
     function getDefaultQuotas() {
-      return { A2: 10, A3: 10, A4: 10, A5: 10 };
+      return {
+        "A2": 10,
+        "A3": 10,
+        "A4": 10,
+        "A5": 10,
+        "10x15 cm": 10,
+        "20x25 cm": 10,
+        "25x25 cm": 10,
+        "35x35 cm": 10,
+      };
     }
 
     function loadQuotas() {
@@ -152,10 +236,12 @@
           id: "sample-0",
           title: "ฉากร้านดอกไม้ของขวัญวันครบรอบ",
           customer_name: "คุณแพรว (Line: praew_p)",
+          customer_phone: "081-234-5678",
+          shipping_address: "123/45 ซ.สุขุมวิท 24 แขวงคลองตัน เขตคลองเตย กทม. 10110",
           description: "เพิ่งสรุปบรีฟ รอคิวเริ่มวาดดราฟ",
           status: "todo",
           priority: "medium",
-          work_size: "A4",
+          work_size: "20x25 cm",
           agreed_price: 2500,
           payment_status: "unpaid_deposit",
           deposit_amount: 0,
@@ -170,6 +256,8 @@
           id: "sample-1",
           title: "งานป๊อปอัพคู่รักแต่งงาน + สัตว์เลี้ยง",
           customer_name: "คุณพลอย (IG: ploy_wed)",
+          customer_phone: "089-456-1234",
+          shipping_address: "88 หมู่บ้านแกรนด์ ถ.ราชพฤกษ์ ต.บางรักน้อย อ.เมือง จ.นนทบุรี 11000",
           description: "โทนสีพาสเทล เพิ่มน้องหมาคอร์กี้ด้านหน้า 2 ตัว",
           status: "draft",
           priority: "high",
@@ -188,10 +276,12 @@
           id: "sample-2",
           title: "กรอบรูปบ้านหลังคาแดง ของขวัญขึ้นบ้านใหม่",
           customer_name: "คุณนนท์ (Line: non_k)",
+          customer_phone: "092-888-9999",
+          shipping_address: "55/9 คอนโดเดอะไลน์ พหลโยธิน แขวงจอมพล เขตจตุจักร กทม. 10900",
           description: "เน้นรายละเอียดสวนหน้าบ้านและป้ายชื่อบ้าน",
           status: "cutting",
           priority: "high",
-          work_size: "A2",
+          work_size: "35x35 cm",
           agreed_price: 5200,
           payment_status: "deposit_paid",
           deposit_amount: 2500,
@@ -206,6 +296,8 @@
           id: "sample-3",
           title: "งานวันเกิดธีมคาเฟ่ญี่ปุ่น",
           customer_name: "คุณมายด์",
+          customer_phone: "086-777-3322",
+          shipping_address: "19/2 ถ.นิมมานเหมินท์ ต.สุเทพ อ.เมือง จ.เชียงใหม่ 50200",
           description: "กรอบไม้สีอ่อน ติดไฟแฟรี่ไลท์ด้านใน",
           status: "framing",
           priority: "medium",
@@ -224,10 +316,12 @@
           id: "sample-4",
           title: "ของขวัญรับปริญญา มศว",
           customer_name: "คุณเจมส์",
+          customer_phone: "095-111-2233",
+          shipping_address: "42 ซ.อารีย์ 1 แขวงสามเสนใน เขตพญาไท กทม. 10400",
           description: "ฉากหลังตึกคณะ พร้อมช่อดอกไม้จิ๋ว",
           status: "backdrop",
           priority: "medium",
-          work_size: "A4",
+          work_size: "25x25 cm",
           agreed_price: 2400,
           payment_status: "deposit_paid",
           deposit_amount: 1000,
@@ -242,10 +336,12 @@
           id: "sample-5",
           title: "มินิการ์ดครบรอบแต่งงาน",
           customer_name: "คุณแอน",
+          customer_phone: "084-555-6677",
+          shipping_address: "101/8 หมู่ 4 ต.ช้างเผือก อ.เมือง จ.เชียงใหม่ 50300",
           description: "แพ็คกล่องของขวัญผูกโบว์สีแดง พร้อมการ์ดอวยพร",
           status: "ready_to_ship",
           priority: "low",
-          work_size: "A5",
+          work_size: "10x15 cm",
           agreed_price: 1500,
           payment_status: "deposit_paid",
           deposit_amount: 750,
@@ -260,6 +356,8 @@
           id: "sample-6",
           title: "ฉากครอบครัว 5 คน ทริปภูเขา",
           customer_name: "คุณกิตติ",
+          customer_phone: "081-999-8877",
+          shipping_address: "77/3 ถ.มิตรภาพ ต.ในเมือง อ.เมือง จ.ขอนแก่น 40000",
           description: "ส่ง EMS แล้ว แจ้งเลขพัสดุเรียบร้อย",
           status: "delivered",
           priority: "medium",
@@ -276,9 +374,6 @@
         },
       ];
     }
-
-    const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
-    const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsaHhzanZvcGJweHdoeHlvY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4NDU3MDQsImV4cCI6MjExMDQyMTcwNH0.HD65cftiSeOvnaZNU4ahmDGwspct3yshwvquiC6sHV0";
 
     function getSupabaseClient() {
       try {
@@ -326,7 +421,6 @@
       const [tasks, setTasks] = useState([]);
       const [quotas, setQuotas] = useState(getDefaultQuotas());
       const [isEditingQuotas, setIsEditingQuotas] = useState(false);
-      const [storageMode, setStorageMode] = useState("local");
 
       // Mobile / iPad stage tab ("all" or specific stage)
       const [mobileStageTab, setMobileStageTab] = useState("all");
@@ -340,7 +434,7 @@
       const [draggedTaskId, setDraggedTaskId] = useState(null);
       const [dragOverColumn, setDragOverColumn] = useState(null);
 
-      // Delivery Payment Prompt Modal (when moving to "delivered" with unpaid balance)
+      // Delivery Payment Prompt Modal
       const [pendingDeliveryTask, setPendingDeliveryTask] = useState(null);
 
       // Modal states
@@ -348,6 +442,8 @@
       const [editingTask, setEditingTask] = useState(null);
       const [formTitle, setFormTitle] = useState("");
       const [formCustomerName, setFormCustomerName] = useState("");
+      const [formCustomerPhone, setFormCustomerPhone] = useState("");
+      const [formShippingAddress, setFormShippingAddress] = useState("");
       const [formDesc, setFormDesc] = useState("");
       const [formStatus, setFormStatus] = useState("todo");
       const [formPriority, setFormPriority] = useState("medium");
@@ -358,11 +454,6 @@
       const [formMonth, setFormMonth] = useState(selectedMonth);
       const [formDueDate, setFormDueDate] = useState("");
       const [formDeliveryDate, setFormDeliveryDate] = useState("");
-
-      const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
-      const [supabaseUrl, setSupabaseUrl] = useState("");
-      const [supabaseKey, setSupabaseKey] = useState("");
-      const [syncMessage, setSyncMessage] = useState(null);
 
       const loadQuotasFromCloud = async () => {
         const client = getSupabaseClient();
@@ -395,11 +486,9 @@
             .order("position", { ascending: true });
           if (!error && data) {
             setTasks(data);
-            setStorageMode("supabase");
             return;
           }
         }
-        setStorageMode("local");
         setTasks(filterTasksWithCarryOver(loadLocalTasks(), monthToLoad));
       };
 
@@ -410,17 +499,6 @@
 
       useEffect(() => {
         loadBoard(selectedMonth);
-        try {
-          const raw = localStorage.getItem(LOCAL_SUPABASE_CONFIG_KEY);
-          if (raw) {
-            const cfg = JSON.parse(raw);
-            setSupabaseUrl(cfg.url || "");
-            setSupabaseKey(cfg.anonKey || "");
-          } else {
-            setSupabaseUrl(DEFAULT_SUPABASE_URL);
-            setSupabaseKey(DEFAULT_SUPABASE_ANON_KEY);
-          }
-        } catch {}
 
         const client = getSupabaseClient();
         let channel = null;
@@ -473,7 +551,7 @@
         setQuotas(updated);
         saveQuotas(updated);
         const client = getSupabaseClient();
-        if (client && storageMode === "supabase") {
+        if (client) {
           await client
             .from("size_quotas")
             .upsert({ work_size: size, max_quota: safeLimit, updated_at: new Date().toISOString() }, { onConflict: "work_size" });
@@ -486,8 +564,10 @@
             const q = searchQuery.toLowerCase();
             const matchTitle = (task.title || "").toLowerCase().includes(q);
             const matchCustomer = (task.customer_name || "").toLowerCase().includes(q);
+            const matchPhone = (task.customer_phone || "").toLowerCase().includes(q);
+            const matchAddress = (task.shipping_address || "").toLowerCase().includes(q);
             const matchDesc = (task.description || "").toLowerCase().includes(q);
-            if (!matchTitle && !matchCustomer && !matchDesc) return false;
+            if (!matchTitle && !matchCustomer && !matchPhone && !matchAddress && !matchDesc) return false;
           }
           if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
           if (sizeFilter !== "all" && (task.work_size || "A4") !== sizeFilter) return false;
@@ -553,6 +633,8 @@
         setEditingTask(null);
         setFormTitle("");
         setFormCustomerName("");
+        setFormCustomerPhone("");
+        setFormShippingAddress("");
         setFormDesc("");
         setFormStatus(defaultStatus);
         setFormPriority("medium");
@@ -570,6 +652,8 @@
         setEditingTask(task);
         setFormTitle(task.title || "");
         setFormCustomerName(task.customer_name || "");
+        setFormCustomerPhone(task.customer_phone || "");
+        setFormShippingAddress(task.shipping_address || "");
         setFormDesc(task.description || "");
         setFormStatus(task.status || "todo");
         setFormPriority(task.priority || "medium");
@@ -585,7 +669,7 @@
 
       const handleSaveTask = async (e) => {
         e.preventDefault();
-        if (!formTitle.trim()) return;
+        if (!formTitle.trim() || !formCustomerPhone.trim()) return;
         const client = getSupabaseClient();
 
         const agreedPriceNum = Math.max(0, Number(formAgreedPrice) || 0);
@@ -600,6 +684,8 @@
           const updates = {
             title: formTitle.trim(),
             customer_name: formCustomerName.trim(),
+            customer_phone: formCustomerPhone.trim(),
+            shipping_address: formShippingAddress.trim(),
             description: formDesc.trim(),
             status: formStatus,
             priority: formPriority,
@@ -612,17 +698,18 @@
             delivery_date: formDeliveryDate || null,
             updated_at: new Date().toISOString(),
           };
-          if (client && storageMode === "supabase") {
+          if (client) {
             await client.from("tasks").update(updates).eq("id", editingTask.id);
-          } else {
-            const all = loadLocalTasks().map((t) => (t.id === editingTask.id ? { ...t, ...updates } : t));
-            saveLocalTasks(all);
           }
+          const all = loadLocalTasks().map((t) => (t.id === editingTask.id ? { ...t, ...updates } : t));
+          saveLocalTasks(all);
         } else {
           const newTask = {
             id: crypto.randomUUID ? crypto.randomUUID() : `task-${Date.now()}`,
             title: formTitle.trim(),
             customer_name: formCustomerName.trim(),
+            customer_phone: formCustomerPhone.trim(),
+            shipping_address: formShippingAddress.trim(),
             description: formDesc.trim(),
             status: formStatus,
             priority: formPriority,
@@ -637,13 +724,12 @@
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
-          if (client && storageMode === "supabase") {
+          if (client) {
             const { id, ...payload } = newTask;
             await client.from("tasks").insert([payload]);
-          } else {
-            const all = [...loadLocalTasks(), newTask];
-            saveLocalTasks(all);
           }
+          const all = [...loadLocalTasks(), newTask];
+          saveLocalTasks(all);
         }
         setIsTaskModalOpen(false);
         await loadBoard(selectedMonth);
@@ -651,11 +737,10 @@
 
       const handleDeleteTask = async (id) => {
         const client = getSupabaseClient();
-        if (client && storageMode === "supabase") {
+        if (client) {
           await client.from("tasks").delete().eq("id", id);
-        } else {
-          saveLocalTasks(loadLocalTasks().filter((t) => t.id !== id));
         }
+        saveLocalTasks(loadLocalTasks().filter((t) => t.id !== id));
         setIsTaskModalOpen(false);
         await loadBoard(selectedMonth);
       };
@@ -679,24 +764,22 @@
           )
         );
         const client = getSupabaseClient();
-        if (client && storageMode === "supabase") {
+        if (client) {
           await client
             .from("tasks")
             .update({ status: newStatus, month: updatedMonth, ...extraPayment })
             .eq("id", taskId);
-        } else {
-          const all = loadLocalTasks().map((t) =>
-            t.id === taskId ? { ...t, status: newStatus, month: updatedMonth, ...extraPayment } : t
-          );
-          saveLocalTasks(all);
         }
+        const all = loadLocalTasks().map((t) =>
+          t.id === taskId ? { ...t, status: newStatus, month: updatedMonth, ...extraPayment } : t
+        );
+        saveLocalTasks(all);
       };
 
       const handleStatusChange = async (taskId, newStatus) => {
         const target = tasks.find((t) => t.id === taskId);
         if (!target || target.status === newStatus) return;
 
-        // ถ้าย้ายเข้าเลน "ส่งแล้ว" แต่ยังเก็บเงินไม่ครบ ให้เด้งถามเตือนทันที!
         if (newStatus === "delivered" && getRemainingBalance(target) > 0) {
           setPendingDeliveryTask(target);
           return;
@@ -713,62 +796,13 @@
           )
         );
         const client = getSupabaseClient();
-        if (client && storageMode === "supabase") {
+        if (client) {
           await client.from("tasks").update({ payment_status: "fully_paid", deposit_amount: price }).eq("id", task.id);
-        } else {
-          const all = loadLocalTasks().map((t) =>
-            t.id === task.id ? { ...t, payment_status: "fully_paid", deposit_amount: price } : t
-          );
-          saveLocalTasks(all);
         }
-      };
-
-      const handleSaveCloudSettings = async (e) => {
-        e.preventDefault();
-        if (!supabaseUrl.trim() || !supabaseKey.trim()) {
-          localStorage.removeItem(LOCAL_SUPABASE_CONFIG_KEY);
-          setSyncMessage("สลับเป็นโหมด LocalStorage ในเครื่องแล้ว");
-          await loadBoard(selectedMonth);
-          return;
-        }
-        localStorage.setItem(
-          LOCAL_SUPABASE_CONFIG_KEY,
-          JSON.stringify({ url: supabaseUrl.trim(), anonKey: supabaseKey.trim() })
+        const all = loadLocalTasks().map((t) =>
+          t.id === task.id ? { ...t, payment_status: "fully_paid", deposit_amount: price } : t
         );
-        setSyncMessage("บันทึกค่าแล้ว กำลังเชื่อมต่อ Supabase...");
-        await loadBoard(selectedMonth);
-        setSyncMessage("ตั้งค่าเสร็จสมบูรณ์!");
-      };
-
-      const handleSyncLocalToCloud = async () => {
-        const client = getSupabaseClient();
-        if (!client) {
-          setSyncMessage("กรุณาใส่ Supabase URL และ Anon Key แล้วกดบันทึกก่อนครับ");
-          return;
-        }
-        const local = loadLocalTasks();
-        const payload = local.map((t, i) => ({
-          title: t.title,
-          customer_name: t.customer_name || "",
-          description: t.description,
-          status: t.status,
-          priority: t.priority,
-          work_size: t.work_size || "A4",
-          agreed_price: Number(t.agreed_price) || 0,
-          payment_status: t.payment_status || "unpaid_deposit",
-          deposit_amount: Number(t.deposit_amount) || 0,
-          month: t.month,
-          due_date: t.due_date || null,
-          delivery_date: t.delivery_date || null,
-          position: i,
-        }));
-        const { error } = await client.from("tasks").insert(payload);
-        if (error) {
-          setSyncMessage("อัปโหลดไม่สำเร็จ: " + error.message);
-        } else {
-          setSyncMessage(`อัปโหลดงาน ${payload.length} รายการขึ้น Supabase เรียบร้อย!`);
-          await loadBoard(selectedMonth);
-        }
+        saveLocalTasks(all);
       };
 
       const visibleColumns = useMemo(() => {
@@ -778,68 +812,55 @@
 
       return (
         <div className="min-h-screen flex flex-col">
-          {/* Header (Burgundy Red Primary) */}
-          <header className="sticky top-0 z-30 border-b border-[#8c243b] bg-gradient-to-r from-[#581322] via-[#6e182a] to-[#4a1228] text-pink-50 shadow-lg shadow-[#581322]/20">
-            <div className="max-w-[1850px] mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          {/* Header (Warm White + Brand Palette #ca5151 / #77585e / #f9e1d3) */}
+          <header className="sticky top-0 z-30 border-b-2 border-[#f9e1d3] bg-white/95 backdrop-blur-md shadow-sm">
+            <div className="max-w-[1850px] mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <img
                   src="./logo.jpg"
-                  alt="Red Roof House Logo"
-                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-pink-200 shadow-md shadow-black/30 bg-amber-50 shrink-0"
+                  alt="Redroof House Logo"
+                  className="h-12 sm:h-14 w-auto rounded-xl object-contain bg-white border border-[#f9e1d3] px-1.5 py-0.5 shadow-sm shrink-0"
                 />
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-base sm:text-lg font-bold text-white">Red Roof House Board</h1>
-                    <button
-                      onClick={() => setIsCloudModalOpen(true)}
-                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition ${
-                        storageMode === "supabase"
-                          ? "bg-sky-200 text-sky-950 border-sky-300"
-                          : "bg-pink-200/90 text-[#581322] border-pink-300"
-                      }`}
-                    >
-                      {storageMode === "supabase" ? "Supabase Cloud" : "LocalStorage Mode"}
-                    </button>
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-pink-200/90">ระบบแทรกกิ้งคิวงาน โควต้ารายเดือน มัดจำ และสถานะการจัดส่งลูกค้า</p>
+                  <h1 className="text-base sm:text-lg font-bold text-[#77585e]">
+                    Red Roof House Board
+                  </h1>
+                  <p className="text-[11px] sm:text-xs text-[#789ea5] font-medium">
+                    ระบบแทรกกิ้งคิวงาน โควต้ารายเดือน มัดจำ และสถานะการจัดส่งลูกค้า
+                  </p>
                 </div>
               </div>
 
               {/* Month Selector */}
-              <div className="flex items-center gap-1.5 bg-[#420d19]/80 border border-pink-300/30 rounded-xl p-1.5 w-full sm:w-auto justify-between sm:justify-start">
+              <div className="flex items-center gap-1.5 bg-[#f9e1d3]/60 border border-[#cc8867]/30 rounded-xl p-1.5 w-full sm:w-auto justify-between sm:justify-start">
                 <button
                   onClick={() => setSelectedMonth((m) => shiftMonth(m, -1))}
-                  className="px-2.5 py-1 rounded-lg hover:bg-[#7b1e34] text-pink-100"
+                  className="px-2.5 py-1 rounded-lg hover:bg-[#f9e1d3] text-[#77585e] font-bold"
                 >
                   ◀
                 </button>
-                <span className="text-xs sm:text-sm font-semibold text-white text-center">
+                <span className="text-xs sm:text-sm font-bold text-[#77585e] text-center">
                   {formatThaiMonth(selectedMonth)}
                 </span>
                 <input
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
-                  className="bg-pink-100 text-xs font-semibold text-[#581322] rounded-lg px-2 py-1 border border-pink-300 focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  className="bg-white text-xs font-semibold text-[#77585e] rounded-lg px-2 py-1 border border-[#cc8867]/40 focus:outline-none focus:border-[#ca5151]"
                 />
                 <button
                   onClick={() => setSelectedMonth((m) => shiftMonth(m, 1))}
-                  className="px-2.5 py-1 rounded-lg hover:bg-[#7b1e34] text-pink-100"
+                  className="px-2.5 py-1 rounded-lg hover:bg-[#f9e1d3] text-[#77585e] font-bold"
                 >
                   ▶
                 </button>
               </div>
 
+              {/* Action Button (No Cloud DB Settings Button) */}
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                 <button
-                  onClick={() => setIsCloudModalOpen(true)}
-                  className="px-3 py-2 rounded-xl text-xs font-medium bg-[#420d19]/70 hover:bg-[#420d19] text-pink-100 border border-pink-300/30"
-                >
-                  ตั้งค่า Cloud DB
-                </button>
-                <button
                   onClick={() => openCreateModal("todo")}
-                  className="flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-pink-100 hover:bg-white text-[#581322] shadow-md shadow-black/25 transition"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#ca5151] hover:bg-[#b54242] text-white shadow-md shadow-[#ca5151]/25 transition"
                 >
                   + เพิ่มงานใหม่
                 </button>
@@ -849,12 +870,12 @@
 
           {/* Dashboards & Filter Section */}
           <section className="max-w-[1850px] mx-auto w-full px-3 sm:px-6 py-4 space-y-4">
-            {/* Work Size Quota Dashboard */}
-            <div className="bg-white/90 backdrop-blur-sm border-2 border-[#7b1e34]/15 rounded-2xl p-3.5 sm:p-4 shadow-sm shadow-[#7b1e34]/5">
+            {/* Work Size Quota Dashboard (8 Sizes) */}
+            <div className="bg-white/90 backdrop-blur-sm border border-[#cc8867]/25 rounded-2xl p-3.5 sm:p-4 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-5 rounded-full bg-[#7b1e34]" />
-                  <h2 className="text-xs sm:text-sm font-bold text-[#581322]">
+                  <span className="w-2 h-5 rounded-full bg-[#ca5151]" />
+                  <h2 className="text-xs sm:text-sm font-bold text-[#77585e]">
                     โควต้างานแต่ละขนาดประจำเดือน ({formatThaiMonth(selectedMonth)})
                   </h2>
                 </div>
@@ -862,15 +883,15 @@
                   onClick={() => setIsEditingQuotas((v) => !v)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
                     isEditingQuotas
-                      ? "bg-[#7b1e34] text-white border-[#581322] shadow-sm"
-                      : "bg-purple-100/80 text-purple-900 border-purple-300 hover:bg-purple-200/80"
+                      ? "bg-[#77585e] text-white border-[#77585e] shadow-sm"
+                      : "bg-[#f3e8ff] text-[#5b3b8c] border-[#d8b4fe] hover:bg-[#e9d5ff]"
                   }`}
                 >
                   {isEditingQuotas ? "บันทึกโควต้าเรียบร้อย" : "ปรับจำนวนโควต้า"}
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
                 {quotaSummary.map((q) => {
                   const isSelected = sizeFilter === q.size;
                   return (
@@ -881,51 +902,51 @@
                           setSizeFilter((prev) => (prev === q.size ? "all" : q.size));
                         }
                       }}
-                      className={`rounded-xl p-3 border transition ${
+                      className={`rounded-xl p-2.5 border transition ${
                         !isEditingQuotas ? "cursor-pointer" : ""
                       } ${
                         isSelected
-                          ? "bg-pink-100/80 border-[#7b1e34] ring-2 ring-[#7b1e34]/30"
+                          ? "bg-[#f9e1d3]/60 border-[#ca5151] ring-2 ring-[#ca5151]/30"
                           : q.isFull
-                          ? "bg-rose-100/70 border-rose-400 hover:border-[#7b1e34]"
+                          ? "bg-[#ffc0b8]/35 border-[#ca5151]"
                           : q.isNearFull
-                          ? "bg-amber-50/90 border-amber-300 hover:border-amber-400"
-                          : "bg-white border-purple-200 hover:border-[#7b1e34]/50"
+                          ? "bg-[#ffd590]/35 border-[#cc8867]"
+                          : "bg-white border-[#f9e1d3] hover:border-[#cc8867]"
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-xs font-bold px-2.5 py-0.5 rounded-lg border ${SIZE_BADGE_STYLES[q.size]}`}>
-                            {q.size}
-                          </span>
-                          {q.isFull ? (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#7b1e34] text-white">
-                              เต็มแล้ว!
-                            </span>
-                          ) : q.isNearFull ? (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300">
-                              เหลือ {q.remaining}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-sky-800 bg-sky-100/90 px-2 py-0.5 rounded-md border border-sky-200 font-semibold">
-                              ว่าง {q.remaining} คิว
-                            </span>
-                          )}
-                        </div>
-
+                      <div className="flex items-center justify-between gap-1 mb-1.5">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${SIZE_BADGE_STYLES[q.size] || "bg-[#f9e1d3] text-[#77585e]"}`}>
+                          {q.size}
+                        </span>
                         <div className="text-right">
-                          <span className={`text-sm sm:text-base font-bold ${q.isFull ? "text-[#7b1e34]" : q.isNearFull ? "text-amber-700" : "text-[#581322]"}`}>
+                          <span className={`text-sm font-bold ${q.isFull ? "text-[#ca5151]" : "text-[#77585e]"}`}>
                             {q.used}
                           </span>
-                          <span className="text-[11px] text-purple-800/80">/{q.limit} งาน</span>
+                          <span className="text-[10px] text-[#77585e]/70">/{q.limit}</span>
                         </div>
                       </div>
 
-                      {/* Solid Color Progress Bar (No Gradient) */}
-                      <div className="w-full h-2 bg-pink-100/90 rounded-full overflow-hidden">
+                      <div className="mb-1.5">
+                        {q.isFull ? (
+                          <span className="text-[10px] font-bold text-[#ca5151]">
+                            เต็มแล้ว!
+                          </span>
+                        ) : q.isNearFull ? (
+                          <span className="text-[10px] font-semibold text-[#cc8867]">
+                            เหลือ {q.remaining} คิว
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-[#789ea5] font-semibold">
+                            ว่าง {q.remaining} คิว
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Solid Color Progress Bar */}
+                      <div className="w-full h-1.5 bg-[#f9e1d3] rounded-full overflow-hidden">
                         <div
                           className={`h-full transition-all duration-300 ${
-                            q.isFull ? "bg-[#7b1e34]" : q.isNearFull ? "bg-amber-500" : "bg-[#8c243b]"
+                            q.isFull ? "bg-[#ca5151]" : q.isNearFull ? "bg-[#cc8867]" : "bg-[#789ea5]"
                           }`}
                           style={{ width: `${q.percent}%` }}
                         />
@@ -934,33 +955,30 @@
                       {isEditingQuotas && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="mt-2.5 pt-2 border-t border-pink-200 flex items-center justify-between gap-1"
+                          className="mt-2 pt-2 border-t border-[#f9e1d3] flex items-center justify-between gap-1"
                         >
-                          <span className="text-[11px] font-medium text-[#581322]">โควต้า ({q.size}):</span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleQuotaChange(q.size, q.limit - 1)}
-                              className="w-6 h-6 rounded bg-[#7b1e34] hover:bg-[#581322] text-white text-xs font-bold"
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              min="0"
-                              max="999"
-                              value={q.limit}
-                              onChange={(e) => handleQuotaChange(q.size, Number(e.target.value))}
-                              className="w-12 bg-white border border-[#7b1e34]/40 rounded px-1 py-0.5 text-center text-xs font-bold text-[#581322]"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleQuotaChange(q.size, q.limit + 1)}
-                              className="w-6 h-6 rounded bg-[#7b1e34] hover:bg-[#581322] text-white text-xs font-bold"
-                            >
-                              +
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleQuotaChange(q.size, q.limit - 1)}
+                            className="w-5 h-5 rounded bg-[#77585e] text-white text-xs font-bold"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            max="999"
+                            value={q.limit}
+                            onChange={(e) => handleQuotaChange(q.size, Number(e.target.value))}
+                            className="w-10 bg-white border border-[#cc8867] rounded px-1 py-0.5 text-center text-[11px] font-bold text-[#77585e]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleQuotaChange(q.size, q.limit + 1)}
+                            className="w-5 h-5 rounded bg-[#77585e] text-white text-xs font-bold"
+                          >
+                            +
+                          </button>
                         </div>
                       )}
                     </div>
@@ -971,43 +989,43 @@
 
             {/* Monthly Overview & Financial Metrics */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-              <div className="bg-white/90 border border-pink-200 rounded-2xl p-3.5 shadow-sm">
-                <div className="flex items-center justify-between text-xs text-[#7b1e34] font-medium mb-1.5">
+              <div className="bg-white/90 border border-[#ffc0b8] rounded-2xl p-3.5 shadow-sm">
+                <div className="flex items-center justify-between text-xs text-[#77585e] font-semibold mb-1.5">
                   <span>ส่งงานแล้วเดือนนี้</span>
-                  <span className="font-bold text-[#7b1e34] text-sm">{stats.percent}%</span>
+                  <span className="font-bold text-[#ca5151] text-sm">{stats.percent}%</span>
                 </div>
-                <div className="w-full h-2.5 bg-pink-100 rounded-full overflow-hidden">
+                <div className="w-full h-2.5 bg-[#f9e1d3] rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-[#7b1e34] transition-all duration-300"
+                    className="h-full bg-[#ca5151] transition-all duration-300"
                     style={{ width: `${stats.percent}%` }}
                   />
                 </div>
-                <p className="text-[11px] text-purple-900/80 mt-2">
+                <p className="text-[11px] text-[#77585e]/80 mt-2">
                   ส่งแล้ว {stats.done} / {stats.total} งาน (กำลังทำ {stats.inProgress})
                 </p>
               </div>
 
-              <div className="bg-white/90 border border-sky-200 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
-                <p className="text-xs text-sky-900/80 font-medium">ยอดรวมที่ตกลงเดือนนี้</p>
-                <p className="text-lg sm:text-xl font-bold text-[#581322] mt-1">฿{formatTHB(stats.totalRevenue)}</p>
-                <p className="text-[11px] text-sky-800 font-semibold mt-0.5">รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}</p>
+              <div className="bg-white/90 border border-[#789ea5]/40 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+                <p className="text-xs text-[#789ea5] font-semibold">ยอดรวมที่ตกลงเดือนนี้</p>
+                <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">฿{formatTHB(stats.totalRevenue)}</p>
+                <p className="text-[11px] text-[#789ea5] font-semibold mt-0.5">รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}</p>
               </div>
 
               <div className={`rounded-2xl p-3.5 shadow-sm flex flex-col justify-between border ${
                 stats.deliveredUnpaidCount > 0
-                  ? "bg-amber-50/95 border-amber-400"
-                  : "bg-white/90 border-purple-200"
+                  ? "bg-[#ffd590]/35 border-[#cc8867]"
+                  : "bg-white/90 border-[#d8b4fe]"
               }`}>
                 <div className="flex items-center justify-between gap-1">
-                  <p className="text-xs text-purple-900/80 font-medium">รอเก็บส่วนที่เหลือตอนส่ง</p>
+                  <p className="text-xs text-[#6b46c1] font-semibold">รอเก็บส่วนที่เหลือตอนส่ง</p>
                   {stats.deliveredUnpaidCount > 0 && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#7b1e34] text-white">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#ca5151] text-white">
                       🚨 ส่งแล้วค้างจ่าย {stats.deliveredUnpaidCount} งาน
                     </span>
                   )}
                 </div>
-                <p className="text-lg sm:text-xl font-bold text-[#7b1e34] mt-1">฿{formatTHB(stats.totalRemainingToCollect)}</p>
-                <p className="text-[11px] text-purple-700 mt-0.5">ยอดค้างชำระเมื่อส่งมอบ</p>
+                <p className="text-lg sm:text-xl font-bold text-[#ca5151] mt-1">฿{formatTHB(stats.totalRemainingToCollect)}</p>
+                <p className="text-[11px] text-[#77585e]/80 mt-0.5">ยอดค้างชำระเมื่อส่งมอบ</p>
               </div>
 
               {/* Overdue Card: Dimmed & No Emoji when stats.overdue === 0 */}
@@ -1019,17 +1037,17 @@
                 }}
                 className={`rounded-2xl p-3.5 flex items-center justify-between border transition ${
                   onlyOverdue
-                    ? "cursor-pointer bg-[#7b1e34] text-white border-[#581322] shadow-sm"
+                    ? "cursor-pointer bg-[#ca5151] text-white border-[#b03e3e] shadow-sm"
                     : stats.overdue > 0
-                    ? "cursor-pointer bg-rose-50/95 border-rose-300 hover:border-[#7b1e34] shadow-sm"
-                    : "bg-white/45 border-pink-200/50 opacity-55"
+                    ? "cursor-pointer bg-[#ffc0b8]/35 border-[#ca5151] shadow-sm"
+                    : "bg-white/45 border-[#f9e1d3] opacity-55"
                 }`}
               >
                 <div>
-                  <p className={`text-xs font-medium ${onlyOverdue ? "text-pink-100" : stats.overdue > 0 ? "text-[#581322]" : "text-slate-400"}`}>
+                  <p className={`text-xs font-semibold ${onlyOverdue ? "text-white/90" : stats.overdue > 0 ? "text-[#77585e]" : "text-slate-400"}`}>
                     เลยกำหนดส่ง {onlyOverdue ? "• กรองอยู่" : ""}
                   </p>
-                  <p className={`text-xl sm:text-2xl font-bold mt-1 ${onlyOverdue ? "text-white" : stats.overdue > 0 ? "text-[#7b1e34]" : "text-slate-400"}`}>
+                  <p className={`text-xl sm:text-2xl font-bold mt-1 ${onlyOverdue ? "text-white" : stats.overdue > 0 ? "text-[#ca5151]" : "text-slate-400"}`}>
                     {stats.overdue} งาน
                   </p>
                 </div>
@@ -1040,20 +1058,20 @@
             </div>
 
             {/* Filter Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2.5 bg-white/90 border border-purple-200 rounded-2xl p-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 bg-white/90 border border-[#f9e1d3] rounded-2xl p-3 shadow-sm">
               <div className="flex flex-wrap items-center gap-2 flex-1">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ค้นหาชื่องาน, ชื่อลูกค้า หรือรายละเอียด..."
-                  className="bg-pink-50/50 border border-pink-200 rounded-xl px-3.5 py-1.5 text-xs sm:text-sm text-[#4a1220] placeholder:text-purple-400 flex-1 min-w-[200px] max-w-sm focus:outline-none focus:border-[#7b1e34] focus:bg-white"
+                  placeholder="ค้นหาชื่องาน, ชื่อลูกค้า, เบอร์โทร หรือที่อยู่..."
+                  className="bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-1.5 text-xs sm:text-sm text-[#77585e] placeholder:text-[#77585e]/50 flex-1 min-w-[200px] max-w-sm focus:outline-none focus:border-[#ca5151] focus:bg-white"
                 />
 
                 <select
                   value={sizeFilter}
                   onChange={(e) => setSizeFilter(e.target.value)}
-                  className="bg-sky-100/70 border border-sky-300 rounded-xl px-3 py-1.5 text-xs font-bold text-[#581322]"
+                  className="bg-[#789ea5]/15 border border-[#789ea5]/40 rounded-xl px-3 py-1.5 text-xs font-bold text-[#77585e]"
                 >
                   <option value="all">ขนาดงาน: ทั้งหมด</option>
                   {DEFAULT_WORK_SIZES.map((s) => (
@@ -1064,7 +1082,7 @@
                 <select
                   value={priorityFilter}
                   onChange={(e) => setPriorityFilter(e.target.value)}
-                  className="bg-purple-100/70 border border-purple-300 rounded-xl px-3 py-1.5 text-xs font-bold text-[#581322]"
+                  className="bg-[#f3e8ff] border border-[#d8b4fe] rounded-xl px-3 py-1.5 text-xs font-bold text-[#77585e]"
                 >
                   <option value="all">Priority: ทั้งหมด</option>
                   <option value="high">High (ด่วน)</option>
@@ -1080,7 +1098,7 @@
                       setSizeFilter("all");
                       setOnlyOverdue(false);
                     }}
-                    className="text-xs text-[#7b1e34] hover:text-[#4a1220] underline px-2 font-semibold"
+                    className="text-xs text-[#ca5151] hover:text-[#77585e] underline px-2 font-semibold"
                   >
                     ล้างตัวกรอง
                   </button>
@@ -1094,8 +1112,8 @@
                 onClick={() => setMobileStageTab("all")}
                 className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
                   mobileStageTab === "all"
-                    ? "bg-[#7b1e34] text-white border-[#581322] shadow-sm"
-                    : "bg-white/90 text-[#581322] border-pink-200"
+                    ? "bg-[#ca5151] text-white border-[#b03e3e] shadow-sm"
+                    : "bg-white/90 text-[#77585e] border-[#f9e1d3]"
                 }`}
               >
                 ทุกเลน ({filteredTasks.length})
@@ -1108,12 +1126,12 @@
                     onClick={() => setMobileStageTab(col.id)}
                     className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 ${
                       mobileStageTab === col.id
-                        ? "bg-[#7b1e34] text-white border-[#581322] shadow-sm"
-                        : "bg-white/90 text-[#581322] border-pink-200"
+                        ? "bg-[#ca5151] text-white border-[#b03e3e] shadow-sm"
+                        : "bg-white/90 text-[#77585e] border-[#f9e1d3]"
                     }`}
                   >
                     <span>{col.title}</span>
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${mobileStageTab === col.id ? "bg-pink-200 text-[#581322]" : "bg-purple-100 text-purple-900"}`}>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${mobileStageTab === col.id ? "bg-white/25 text-white" : "bg-[#f9e1d3] text-[#77585e]"}`}>
                       {count}
                     </span>
                   </button>
@@ -1154,21 +1172,21 @@
                       mobileStageTab === "all"
                         ? "w-[85vw] sm:w-[300px] 2xl:w-auto"
                         : "w-full"
-                    } rounded-2xl bg-white/80 backdrop-blur-sm border-t-4 ${col.accent} border-x border-b border-pink-200/90 shadow-sm shadow-[#7b1e34]/5 flex flex-col min-h-[520px] transition ${
-                      isOver ? "ring-2 ring-[#7b1e34] bg-pink-50/70" : ""
+                    } rounded-2xl bg-white/85 backdrop-blur-sm border-t-4 ${col.accent} border-x border-b border-[#f9e1d3] shadow-sm flex flex-col min-h-[520px] transition ${
+                      isOver ? "ring-2 ring-[#ca5151] bg-[#f9e1d3]/30" : ""
                     }`}
                   >
-                    {/* Column Header (No Subtitle) */}
-                    <div className={`p-3 border-b border-pink-200/60 rounded-t-xl flex items-center justify-between ${col.headerBg}`}>
+                    {/* Column Header */}
+                    <div className={`p-3 border-b border-[#f9e1d3] rounded-t-xl flex items-center justify-between ${col.headerBg}`}>
                       <div className="flex items-center gap-2">
-                        <h2 className="font-bold text-sm text-[#4a1220]">{col.title}</h2>
+                        <h2 className="font-bold text-sm text-[#77585e]">{col.title}</h2>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${col.badgeBg}`}>
                           {colTasks.length}
                         </span>
                       </div>
                       <button
                         onClick={() => openCreateModal(col.id)}
-                        className="px-2 py-0.5 rounded-lg bg-white/70 hover:bg-[#7b1e34] text-[#7b1e34] hover:text-white text-sm font-bold shadow-sm transition"
+                        className="px-2 py-0.5 rounded-lg bg-white/80 hover:bg-[#ca5151] text-[#77585e] hover:text-white text-sm font-bold shadow-sm transition"
                         title={`เพิ่มงานใน ${col.title}`}
                       >
                         +
@@ -1177,11 +1195,11 @@
 
                     <div className="p-3 space-y-3 flex-1">
                       {colTasks.length === 0 ? (
-                        <div className="h-32 rounded-xl border border-dashed border-purple-200 bg-purple-50/30 flex flex-col items-center justify-center text-purple-500 text-xs p-3 text-center">
+                        <div className="h-32 rounded-xl border border-dashed border-[#cc8867]/40 bg-[#fdf7f2]/60 flex flex-col items-center justify-center text-[#77585e]/60 text-xs p-3 text-center">
                           <p>ไม่มีงานในสถานะนี้</p>
                           <button
                             onClick={() => openCreateModal(col.id)}
-                            className="mt-1 text-[#7b1e34] font-semibold hover:underline"
+                            className="mt-1 text-[#ca5151] font-semibold hover:underline"
                           >
                             + เพิ่มงาน
                           </button>
@@ -1209,10 +1227,10 @@
                               }}
                               className={`rounded-2xl bg-white border p-3.5 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing space-y-2.5 ${
                                 isDeliveredButUnpaid
-                                  ? "border-2 border-amber-500 bg-amber-50/40"
+                                  ? "border-2 border-[#cc8867] bg-[#ffd590]/20"
                                   : dueState === "overdue"
-                                  ? "border-[#7b1e34] bg-rose-50/70 ring-1 ring-[#7b1e34]/20"
-                                  : "border-pink-200/90 hover:border-[#7b1e34]/60"
+                                  ? "border-[#ca5151] bg-[#ffc0b8]/20 ring-1 ring-[#ca5151]/20"
+                                  : "border-[#f9e1d3] hover:border-[#cc8867]"
                               }`}
                             >
                               {/* Row 1: Badges + Edit Button */}
@@ -1226,58 +1244,75 @@
                                     {pStyle.label}
                                   </span>
                                   {isCarriedOver && (
-                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-300">
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#f3e8ff] text-[#5b3b8c] border border-[#d8b4fe]">
                                       ยกมาจาก {task.month}
                                     </span>
                                   )}
                                   {dueState === "overdue" && (
-                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#7b1e34] text-white animate-pulse">
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#ca5151] text-white animate-pulse">
                                       🚨 เลยกำหนด
                                     </span>
                                   )}
                                 </div>
                                 <button
                                   onClick={() => openEditModal(task)}
-                                  className="text-xs px-1.5 py-0.5 rounded hover:bg-pink-50 text-purple-600 hover:text-[#7b1e34] font-semibold shrink-0"
+                                  className="text-xs px-1.5 py-0.5 rounded hover:bg-[#f9e1d3]/60 text-[#77585e] hover:text-[#ca5151] font-semibold shrink-0"
                                 >
                                   แก้ไข
                                 </button>
                               </div>
 
-                              {/* Row 2: Title & Customer (No Strikethrough on Thai text!) */}
-                              <div>
+                              {/* Row 2: Title, Customer Name, Phone & Address */}
+                              <div className="space-y-1">
                                 <h3
                                   onClick={() => openEditModal(task)}
-                                  className={`font-bold text-sm leading-relaxed cursor-pointer hover:text-[#7b1e34] ${
-                                    task.status === "delivered" ? "text-[#4a1220]/75" : "text-[#4a1220]"
+                                  className={`font-bold text-sm leading-relaxed cursor-pointer hover:text-[#ca5151] ${
+                                    task.status === "delivered" ? "text-[#77585e]/75" : "text-[#4a3539]"
                                   }`}
                                 >
                                   {task.title}
                                 </h3>
 
-                                {task.customer_name && (
-                                  <p className="mt-1 text-xs font-semibold text-sky-900 bg-sky-100/80 border border-sky-200/80 inline-block px-2 py-0.5 rounded-md max-w-full truncate">
-                                    {task.customer_name}
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {task.customer_name && (
+                                    <span className="text-xs font-semibold text-[#4a6b72] bg-[#789ea5]/15 border border-[#789ea5]/30 px-2 py-0.5 rounded-md truncate max-w-full">
+                                      {task.customer_name}
+                                    </span>
+                                  )}
+                                  {task.customer_phone && (
+                                    <a
+                                      href={`tel:${task.customer_phone}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-xs font-bold text-[#77585e] bg-[#f9e1d3]/80 border border-[#cc8867]/40 px-2 py-0.5 rounded-md hover:bg-[#ffd590]/60 transition"
+                                    >
+                                      โทร: {task.customer_phone}
+                                    </a>
+                                  )}
+                                </div>
+
+                                {task.shipping_address && (
+                                  <p className="text-[11px] text-[#77585e]/85 bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2 py-1 line-clamp-2">
+                                    ที่อยู่: {task.shipping_address}
                                   </p>
                                 )}
 
                                 {task.description && (
-                                  <p className="text-xs text-slate-500 mt-1.5 line-clamp-1">
+                                  <p className="text-xs text-[#77585e]/70 line-clamp-1">
                                     {task.description}
                                   </p>
                                 )}
                               </div>
 
-                              {/* Row 3: Compact 1-Block Payment Summary (With Alert if Delivered & Unpaid!) */}
+                              {/* Row 3: Compact Payment Summary */}
                               {isDeliveredButUnpaid ? (
-                                <div className="p-2.5 rounded-xl bg-amber-100/90 border border-amber-400 flex items-center justify-between gap-2">
+                                <div className="p-2.5 rounded-xl bg-[#ffd590]/55 border border-[#cc8867] flex items-center justify-between gap-2">
                                   <div>
-                                    <p className="text-[11px] font-bold text-[#7b1e34]">
+                                    <p className="text-[11px] font-bold text-[#ca5151]">
                                       🚨 ส่งแล้ว • ยังไม่เก็บส่วนที่เหลือ
                                     </p>
-                                    <p className="text-xs font-bold text-[#581322] mt-0.5">
+                                    <p className="text-xs font-bold text-[#77585e] mt-0.5">
                                       ค้างชำระ ฿{formatTHB(remainingBalance)}{" "}
-                                      <span className="font-normal text-[11px] text-purple-900/70">
+                                      <span className="font-normal text-[11px] text-[#77585e]/75">
                                         (จาก ฿{formatTHB(agreedPrice)})
                                       </span>
                                     </p>
@@ -1285,42 +1320,42 @@
                                   <button
                                     type="button"
                                     onClick={() => handleMarkFullyPaid(task)}
-                                    className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-[#7b1e34] hover:bg-[#581322] text-white font-bold shadow-sm transition"
+                                    className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-[#ca5151] hover:bg-[#b03e3e] text-white font-bold shadow-sm transition"
                                   >
                                     รับครบแล้ว
                                   </button>
                                 </div>
                               ) : remainingBalance === 0 ? (
-                                <div className="px-2.5 py-1.5 rounded-xl bg-sky-50/90 border border-sky-200/80 flex items-center justify-between text-xs">
-                                  <span className="text-sky-900 font-semibold">ชำระครบแล้ว</span>
-                                  <span className="font-bold text-[#581322]">฿{formatTHB(agreedPrice)}</span>
+                                <div className="px-2.5 py-1.5 rounded-xl bg-[#789ea5]/15 border border-[#789ea5]/35 flex items-center justify-between text-xs">
+                                  <span className="text-[#4a6b72] font-semibold">ชำระครบแล้ว</span>
+                                  <span className="font-bold text-[#77585e]">฿{formatTHB(agreedPrice)}</span>
                                 </div>
                               ) : (
-                                <div className="p-2 rounded-xl bg-purple-50/70 border border-purple-200/80 flex items-center justify-between gap-2">
+                                <div className="p-2 rounded-xl bg-[#f3e8ff]/70 border border-[#d8b4fe] flex items-center justify-between gap-2">
                                   <div className="text-xs">
-                                    <span className="text-purple-900/80 font-medium">
+                                    <span className="text-[#5b3b8c] font-medium">
                                       {paymentStatus === "deposit_paid" ? "คงเหลือตอนส่ง: " : "ยังไม่มัดจำ: "}
                                     </span>
-                                    <span className="font-bold text-[#7b1e34]">
+                                    <span className="font-bold text-[#ca5151]">
                                       ฿{formatTHB(remainingBalance)}
                                     </span>
                                   </div>
                                   <button
                                     type="button"
                                     onClick={() => handleMarkFullyPaid(task)}
-                                    className="shrink-0 text-[11px] px-2 py-0.5 rounded-md bg-[#7b1e34] hover:bg-[#581322] text-white font-semibold transition"
+                                    className="shrink-0 text-[11px] px-2 py-0.5 rounded-md bg-[#ca5151] hover:bg-[#b03e3e] text-white font-semibold transition"
                                   >
                                     รับครบ
                                   </button>
                                 </div>
                               )}
 
-                              {/* Row 4: Footer (Short Delivery Date + Status Dropdown on 1 clean row) */}
-                              <div className="pt-2 border-t border-pink-100 flex items-center justify-between gap-2">
+                              {/* Row 4: Footer (Short Delivery Date + Status Dropdown) */}
+                              <div className="pt-2 border-t border-[#f9e1d3] flex items-center justify-between gap-2">
                                 <span className={`text-[11px] shrink-0 ${
                                   dueState === "overdue"
-                                    ? "text-[#7b1e34] font-bold"
-                                    : "text-purple-900/75 font-medium"
+                                    ? "text-[#ca5151] font-bold"
+                                    : "text-[#77585e]/80 font-medium"
                                 }`}>
                                   ส่ง: {formatShortDate(task.delivery_date)}
                                 </span>
@@ -1328,7 +1363,7 @@
                                 <select
                                   value={task.status}
                                   onChange={(e) => handleStatusChange(task.id, e.target.value)}
-                                  className="bg-purple-50/90 border border-purple-200 text-[#4a1220] font-semibold rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#7b1e34]"
+                                  className="bg-[#f9e1d3]/50 border border-[#cc8867]/40 text-[#77585e] font-semibold rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#ca5151]"
                                 >
                                   {COLUMNS.map((c) => (
                                     <option key={c.id} value={c.id}>{c.title}</option>
@@ -1348,44 +1383,44 @@
 
           {/* Delivery Unpaid Confirmation Modal */}
           {pendingDeliveryTask && (
-            <div className="fixed inset-0 z-50 bg-[#3d0d18]/55 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white border-2 border-[#7b1e34] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="fixed inset-0 z-50 bg-[#4a3539]/55 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white border-2 border-[#ca5151] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-[#7b1e34] border border-amber-300 mb-2">
+                    <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#ffd590]/60 text-[#ca5151] border border-[#cc8867] mb-2">
                       🚨 แจ้งเตือนยอดค้างชำระก่อนส่งงาน
                     </span>
-                    <h3 className="text-base font-bold text-[#581322]">
+                    <h3 className="text-base font-bold text-[#77585e]">
                       {pendingDeliveryTask.title}
                     </h3>
-                    <p className="text-xs text-purple-900 mt-0.5">
-                      ลูกค้า: {pendingDeliveryTask.customer_name || "-"}
+                    <p className="text-xs text-[#789ea5] font-semibold mt-0.5">
+                      ลูกค้า: {pendingDeliveryTask.customer_name || "-"} ({pendingDeliveryTask.customer_phone || "-"})
                     </p>
                   </div>
                   <button
                     onClick={() => setPendingDeliveryTask(null)}
-                    className="text-purple-400 hover:text-[#7b1e34]"
+                    className="text-[#77585e]/60 hover:text-[#ca5151]"
                   >
                     ✕
                   </button>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs space-y-1">
+                <div className="p-3.5 rounded-xl bg-[#f9e1d3]/50 border border-[#cc8867]/40 text-xs space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-purple-900">ราคาที่ตกลง:</span>
-                    <span className="font-bold text-[#581322]">
+                    <span className="text-[#77585e]">ราคาที่ตกลง:</span>
+                    <span className="font-bold text-[#77585e]">
                       ฿{formatTHB(pendingDeliveryTask.agreed_price)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm pt-1 border-t border-rose-200">
-                    <span className="font-bold text-[#7b1e34]">ยอดที่ต้องเก็บเพิ่มตอนส่ง:</span>
-                    <span className="font-bold text-[#7b1e34]">
+                  <div className="flex justify-between text-sm pt-1 border-t border-[#cc8867]/30">
+                    <span className="font-bold text-[#ca5151]">ยอดที่ต้องเก็บเพิ่มตอนส่ง:</span>
+                    <span className="font-bold text-[#ca5151]">
                       ฿{formatTHB(getRemainingBalance(pendingDeliveryTask))} บาท
                     </span>
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed">
+                <p className="text-xs text-[#77585e] leading-relaxed">
                   คุณกำลังย้ายงานนี้ไปที่สถานะ <strong>"ส่งแล้ว"</strong> ลูกค้าได้ชำระเงินส่วนที่เหลือครบเรียบร้อยแล้วหรือยังครับ?
                 </p>
 
@@ -1397,7 +1432,7 @@
                       setPendingDeliveryTask(null);
                       await commitStatusChange(t.id, "delivered", true);
                     }}
-                    className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-[#7b1e34] hover:bg-[#581322] text-white shadow-md transition"
+                    className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-[#ca5151] hover:bg-[#b03e3e] text-white shadow-md transition"
                   >
                     รับเงินครบแล้ว + ย้ายไปส่งแล้ว
                   </button>
@@ -1408,7 +1443,7 @@
                       setPendingDeliveryTask(null);
                       await commitStatusChange(t.id, "delivered", false);
                     }}
-                    className="py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 transition"
+                    className="py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-[#ffd590]/60 hover:bg-[#ffd590] text-[#77585e] border border-[#cc8867] transition"
                   >
                     ยังไม่ได้รับ (ติดป้ายเตือนไว้)
                   </button>
@@ -1417,51 +1452,78 @@
             </div>
           )}
 
-          {/* Task Modal */}
+          {/* Create / Edit Task Modal */}
           {isTaskModalOpen && (
-            <div className="fixed inset-0 z-50 bg-[#3d0d18]/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-              <div className="bg-white border-2 border-[#7b1e34]/20 rounded-t-3xl sm:rounded-2xl max-w-xl w-full p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
-                <div className="flex items-center justify-between pb-3 border-b border-pink-200">
-                  <h2 className="text-base font-bold text-[#581322]">
+            <div className="fixed inset-0 z-50 bg-[#4a3539]/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="bg-white border-2 border-[#f9e1d3] rounded-t-3xl sm:rounded-2xl max-w-xl w-full p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+                <div className="flex items-center justify-between pb-3 border-b border-[#f9e1d3]">
+                  <h2 className="text-base font-bold text-[#77585e]">
                     {editingTask ? "แก้ไขรายละเอียดงาน" : "เพิ่มคิวงานใหม่"}
                   </h2>
-                  <button onClick={() => setIsTaskModalOpen(false)} className="text-purple-500 hover:text-[#7b1e34] p-1">✕</button>
+                  <button onClick={() => setIsTaskModalOpen(false)} className="text-[#77585e]/60 hover:text-[#ca5151] p-1">✕</button>
                 </div>
 
-                <form onSubmit={handleSaveTask} className="space-y-4 mt-4">
+                <form onSubmit={handleSaveTask} className="space-y-3.5 mt-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[#77585e] mb-1">ชื่องาน *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formTitle}
+                      onChange={(e) => setFormTitle(e.target.value)}
+                      placeholder="เช่น กรอบรูปป๊อปอัพแต่งงาน"
+                      className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-[#581322] mb-1">ชื่องาน *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formTitle}
-                        onChange={(e) => setFormTitle(e.target.value)}
-                        placeholder="เช่น กรอบรูปป๊อปอัพแต่งงาน"
-                        className="w-full bg-pink-50/40 border border-pink-200 rounded-xl px-3.5 py-2 text-sm text-[#4a1220] focus:outline-none focus:border-[#7b1e34] focus:bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-[#581322] mb-1">ชื่อลูกค้า *</label>
+                      <label className="block text-xs font-bold text-[#77585e] mb-1">ชื่อลูกค้า *</label>
                       <input
                         type="text"
                         required
                         value={formCustomerName}
                         onChange={(e) => setFormCustomerName(e.target.value)}
                         placeholder="เช่น คุณพลอย (Line / IG)"
-                        className="w-full bg-sky-50/50 border border-sky-200 rounded-xl px-3.5 py-2 text-sm text-[#4a1220] focus:outline-none focus:border-[#7b1e34] focus:bg-white"
+                        className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-[#ca5151] mb-1">
+                        เบอร์โทรศัพท์ลูกค้า (สำคัญมาก) *
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={formCustomerPhone}
+                        onChange={(e) => setFormCustomerPhone(e.target.value)}
+                        placeholder="เช่น 081-234-5678"
+                        className="w-full bg-[#ffc0b8]/20 border-2 border-[#ca5151]/50 rounded-xl px-3.5 py-2 text-sm font-semibold text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
                       />
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-bold text-[#77585e] mb-1">
+                      ที่อยู่จัดส่งของลูกค้า
+                    </label>
+                    <textarea
+                      rows="2"
+                      value={formShippingAddress}
+                      onChange={(e) => setFormShippingAddress(e.target.value)}
+                      placeholder="กรอกบ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด และรหัสไปรษณีย์..."
+                      className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-[#581322] mb-1">ขนาดงาน</label>
+                      <label className="block text-xs font-bold text-[#77585e] mb-1">ขนาดงาน</label>
                       <select
                         value={formWorkSize}
                         onChange={(e) => setFormWorkSize(e.target.value)}
-                        className="w-full bg-purple-50/50 border border-purple-200 rounded-xl px-2.5 py-2 text-xs sm:text-sm font-semibold text-[#4a1220]"
+                        className="w-full bg-[#f3e8ff]/60 border border-[#d8b4fe] rounded-xl px-2.5 py-2 text-xs sm:text-sm font-semibold text-[#4a3539]"
                       >
                         {DEFAULT_WORK_SIZES.map((size) => {
                           const used = tasks.filter(
@@ -1478,11 +1540,11 @@
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-[#581322] mb-1">สถานะงาน</label>
+                      <label className="block text-xs font-bold text-[#77585e] mb-1">สถานะงาน</label>
                       <select
                         value={formStatus}
                         onChange={(e) => setFormStatus(e.target.value)}
-                        className="w-full bg-purple-50/50 border border-purple-200 rounded-xl px-2.5 py-2 text-xs sm:text-sm font-semibold text-[#4a1220]"
+                        className="w-full bg-[#f3e8ff]/60 border border-[#d8b4fe] rounded-xl px-2.5 py-2 text-xs sm:text-sm font-semibold text-[#4a3539]"
                       >
                         {COLUMNS.map((c) => (
                           <option key={c.id} value={c.id}>{c.title}</option>
@@ -1491,11 +1553,11 @@
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-[#581322] mb-1">ความสำคัญ</label>
+                      <label className="block text-xs font-bold text-[#77585e] mb-1">ความสำคัญ</label>
                       <select
                         value={formPriority}
                         onChange={(e) => setFormPriority(e.target.value)}
-                        className="w-full bg-purple-50/50 border border-purple-200 rounded-xl px-2.5 py-2 text-xs sm:text-sm font-semibold text-[#4a1220]"
+                        className="w-full bg-[#f3e8ff]/60 border border-[#d8b4fe] rounded-xl px-2.5 py-2 text-xs sm:text-sm font-semibold text-[#4a3539]"
                       >
                         <option value="high">High (ด่วน)</option>
                         <option value="medium">Medium (กลาง)</option>
@@ -1505,15 +1567,15 @@
                   </div>
 
                   {/* Price & Deposit Box */}
-                  <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-[#f3e8ff]/50 border border-[#d8b4fe] space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-[#581322]">ข้อมูลราคาและการมัดจำ</span>
-                      <span className="text-xs text-purple-800 font-medium">คำนวณยอดคงเหลืออัตโนมัติ</span>
+                      <span className="text-xs font-bold text-[#77585e]">ข้อมูลราคาและการมัดจำ</span>
+                      <span className="text-xs text-[#6b46c1] font-medium">คำนวณยอดคงเหลืออัตโนมัติ</span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-[#581322] mb-1">ราคาที่ตกลง (บาท)</label>
+                        <label className="block text-xs font-semibold text-[#77585e] mb-1">ราคาที่ตกลง (บาท)</label>
                         <input
                           type="number"
                           min="0"
@@ -1521,12 +1583,12 @@
                           value={formAgreedPrice}
                           onChange={(e) => setFormAgreedPrice(e.target.value)}
                           placeholder="เช่น 2500"
-                          className="w-full bg-white border border-pink-200 rounded-xl px-3 py-2 text-sm text-[#4a1220]"
+                          className="w-full bg-white border border-[#f9e1d3] rounded-xl px-3 py-2 text-sm text-[#4a3539]"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-[#581322] mb-1">สถานะมัดจำ</label>
+                        <label className="block text-xs font-semibold text-[#77585e] mb-1">สถานะมัดจำ</label>
                         <select
                           value={formPaymentStatus}
                           onChange={(e) => {
@@ -1541,7 +1603,7 @@
                               setFormDepositAmount(String(Math.round(price * 0.5)));
                             }
                           }}
-                          className="w-full bg-white border border-pink-200 rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-[#4a1220]"
+                          className="w-full bg-white border border-[#f9e1d3] rounded-xl px-3 py-2 text-xs sm:text-sm font-medium text-[#4a3539]"
                         >
                           <option value="unpaid_deposit">ยังไม่เก็บมัดจำ</option>
                           <option value="deposit_paid">เก็บมัดจำแล้ว</option>
@@ -1551,12 +1613,12 @@
 
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-semibold text-[#581322]">ยอดมัดจำที่รับแล้ว</label>
+                          <label className="text-xs font-semibold text-[#77585e]">ยอดมัดจำที่รับแล้ว</label>
                           {formPaymentStatus === "deposit_paid" && Number(formAgreedPrice) > 0 && (
                             <button
                               type="button"
                               onClick={() => setFormDepositAmount(String(Math.round(Number(formAgreedPrice) * 0.5)))}
-                              className="text-[10px] text-[#7b1e34] font-bold hover:underline"
+                              className="text-[10px] text-[#ca5151] font-bold hover:underline"
                             >
                               คิด 50%
                             </button>
@@ -1576,14 +1638,14 @@
                           }
                           onChange={(e) => setFormDepositAmount(e.target.value)}
                           placeholder="0"
-                          className="w-full bg-white border border-pink-200 disabled:opacity-50 rounded-xl px-3 py-2 text-sm text-[#4a1220]"
+                          className="w-full bg-white border border-[#f9e1d3] disabled:opacity-50 rounded-xl px-3 py-2 text-sm text-[#4a3539]"
                         />
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white border border-purple-200 text-xs">
-                      <span className="text-[#581322] font-semibold">ยอดที่ต้องเก็บเพิ่มเมื่อส่งมอบงาน:</span>
-                      <span className={`text-sm font-bold ${modalRemainingPreview > 0 ? "text-[#7b1e34]" : "text-sky-700"}`}>
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white border border-[#d8b4fe] text-xs">
+                      <span className="text-[#77585e] font-semibold">ยอดที่ต้องเก็บเพิ่มเมื่อส่งมอบงาน:</span>
+                      <span className={`text-sm font-bold ${modalRemainingPreview > 0 ? "text-[#ca5151]" : "text-[#789ea5]"}`}>
                         ฿{formatTHB(modalRemainingPreview)} บาท
                       </span>
                     </div>
@@ -1591,51 +1653,51 @@
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-[#581322] mb-1">ประจำเดือน</label>
+                      <label className="block text-xs font-bold text-[#77585e] mb-1">ประจำเดือน</label>
                       <input
                         type="month"
                         value={formMonth}
                         onChange={(e) => setFormMonth(e.target.value)}
-                        className="w-full bg-pink-50/40 border border-pink-200 rounded-xl px-3 py-2 text-sm text-[#4a1220]"
+                        className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3 py-2 text-sm text-[#4a3539]"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-[#581322] mb-1">วันกำหนดทำเสร็จ</label>
+                      <label className="block text-xs font-bold text-[#77585e] mb-1">วันกำหนดทำเสร็จ</label>
                       <input
                         type="date"
                         value={formDueDate}
                         onChange={(e) => setFormDueDate(e.target.value)}
-                        className="w-full bg-pink-50/40 border border-pink-200 rounded-xl px-3 py-2 text-sm text-[#4a1220]"
+                        className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3 py-2 text-sm text-[#4a3539]"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-[#7b1e34] font-bold mb-1">วันที่ต้องส่งถึงมือลูกค้า</label>
+                      <label className="block text-xs text-[#ca5151] font-bold mb-1">วันที่ต้องส่งถึงมือลูกค้า</label>
                       <input
                         type="date"
                         value={formDeliveryDate}
                         onChange={(e) => setFormDeliveryDate(e.target.value)}
-                        className="w-full bg-sky-50/70 border border-sky-300 rounded-xl px-3 py-2 text-sm text-[#4a1220]"
+                        className="w-full bg-[#789ea5]/15 border border-[#789ea5] rounded-xl px-3 py-2 text-sm text-[#4a3539]"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-[#581322] mb-1">รายละเอียดบรีฟ / ที่อยู่จัดส่ง</label>
+                    <label className="block text-xs font-bold text-[#77585e] mb-1">รายละเอียดบรีฟเพิ่มเติม</label>
                     <textarea
                       rows="2"
                       value={formDesc}
                       onChange={(e) => setFormDesc(e.target.value)}
-                      placeholder="จดบันทึกบรีฟลูกค้า สีกรอบ ข้อความการ์ด หรือที่อยู่จัดส่ง..."
-                      className="w-full bg-pink-50/40 border border-pink-200 rounded-xl px-3.5 py-2 text-sm text-[#4a1220]"
+                      placeholder="จดบันทึกบรีฟลูกค้า สีกรอบ หรือข้อความการ์ด..."
+                      className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539]"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-pink-200">
+                  <div className="flex items-center justify-between pt-3 border-t border-[#f9e1d3]">
                     {editingTask ? (
                       <button
                         type="button"
                         onClick={() => handleDeleteTask(editingTask.id)}
-                        className="text-xs text-[#7b1e34] font-bold hover:underline"
+                        className="text-xs text-[#ca5151] font-bold hover:underline"
                       >
                         ลบงานนี้
                       </button>
@@ -1644,78 +1706,15 @@
                       <button
                         type="button"
                         onClick={() => setIsTaskModalOpen(false)}
-                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-purple-100 text-purple-900"
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#f9e1d3] text-[#77585e]"
                       >
                         ยกเลิก
                       </button>
                       <button
                         type="submit"
-                        className="px-5 py-2 rounded-xl text-xs font-bold bg-[#7b1e34] hover:bg-[#581322] text-white shadow-md shadow-[#7b1e34]/30"
+                        className="px-5 py-2 rounded-xl text-xs font-bold bg-[#ca5151] hover:bg-[#b03e3e] text-white shadow-md shadow-[#ca5151]/25"
                       >
                         บันทึกงาน
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Cloud Settings Modal */}
-          {isCloudModalOpen && (
-            <div className="fixed inset-0 z-50 bg-[#3d0d18]/50 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white border-2 border-[#7b1e34]/20 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-pink-200">
-                  <h2 className="text-base font-bold text-[#581322]">ตั้งค่าฐานข้อมูล Supabase (Hybrid Mode)</h2>
-                  <button onClick={() => setIsCloudModalOpen(false)} className="text-purple-400 hover:text-[#7b1e34]">✕</button>
-                </div>
-                <form onSubmit={handleSaveCloudSettings} className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-[#581322] mb-1">Supabase Project URL</label>
-                    <input
-                      type="url"
-                      value={supabaseUrl}
-                      onChange={(e) => setSupabaseUrl(e.target.value)}
-                      placeholder="https://xxxxxxxxxxxx.supabase.co"
-                      className="w-full bg-pink-50/40 border border-pink-200 rounded-xl px-3.5 py-2 text-xs text-[#4a1220]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-[#581322] mb-1">Supabase Anon Public Key</label>
-                    <input
-                      type="password"
-                      value={supabaseKey}
-                      onChange={(e) => setSupabaseKey(e.target.value)}
-                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                      className="w-full bg-pink-50/40 border border-pink-200 rounded-xl px-3.5 py-2 text-xs text-[#4a1220]"
-                    />
-                  </div>
-                  {syncMessage && (
-                    <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-950 font-medium">
-                      {syncMessage}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleSyncLocalToCloud}
-                      className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-sky-100 text-sky-900 border border-sky-300"
-                    >
-                      ซิงค์งานจากเครื่องขึ้น Supabase
-                    </button>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsCloudModalOpen(false)}
-                        className="px-3 py-2 rounded-xl text-xs font-semibold bg-purple-100 text-purple-900"
-                      >
-                        ปิด
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 rounded-xl text-xs font-bold bg-[#7b1e34] text-white"
-                      >
-                        บันทึกการเชื่อมต่อ
                       </button>
                     </div>
                   </div>
