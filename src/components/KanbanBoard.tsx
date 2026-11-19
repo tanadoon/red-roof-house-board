@@ -267,6 +267,7 @@ export default function KanbanBoard() {
   const [formPaymentStatus, setFormPaymentStatus] =
     useState<PaymentStatus>("unpaid_deposit");
   const [formDepositAmount, setFormDepositAmount] = useState<string>("");
+  const [formShippingPaid, setFormShippingPaid] = useState<boolean>(false);
   const [formMonth, setFormMonth] = useState<string>(selectedMonth);
   const [formDueDate, setFormDueDate] = useState<string>("");
   const [formDeliveryDate, setFormDeliveryDate] = useState<string>("");
@@ -381,18 +382,35 @@ export default function KanbanBoard() {
     }).length;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
+    const getTaskCustShip = (taskId: string) =>
+      allShippingHops
+        .filter((h) => h.task_id === taskId)
+        .reduce((s, h) => s + (Number(h.customer_cost) || 0), 0);
+
     const totalRevenue = tasks.reduce(
       (sum, t) => sum + (Number(t.agreed_price) || 0),
       0
     );
-    const totalRemainingToCollect = tasks.reduce(
+    const totalRemainingWorkToCollect = tasks.reduce(
       (sum, t) => sum + getRemainingBalance(t),
       0
     );
-    const totalCollected = Math.max(0, totalRevenue - totalRemainingToCollect);
-    const deliveredUnpaidCount = tasks.filter(
-      (t) => t.status === "delivered" && getRemainingBalance(t) > 0
-    ).length;
+    const totalCollected = Math.max(
+      0,
+      totalRevenue - totalRemainingWorkToCollect
+    );
+    const totalRemainingShippingToCollect = tasks.reduce((sum, t) => {
+      if (t.shipping_paid) return sum;
+      return sum + getTaskCustShip(t.id);
+    }, 0);
+    const totalRemainingToCollect =
+      totalRemainingWorkToCollect + totalRemainingShippingToCollect;
+    const deliveredUnpaidCount = tasks.filter((t) => {
+      if (t.status !== "delivered") return false;
+      const workUnpaid = getRemainingBalance(t) > 0;
+      const shipUnpaid = !t.shipping_paid && getTaskCustShip(t.id) > 0;
+      return workUnpaid || shipUnpaid;
+    }).length;
 
     return {
       total,
@@ -402,10 +420,12 @@ export default function KanbanBoard() {
       percent,
       totalRevenue,
       totalCollected,
+      totalRemainingWorkToCollect,
+      totalRemainingShippingToCollect,
       totalRemainingToCollect,
       deliveredUnpaidCount,
     };
-  }, [tasks]);
+  }, [tasks, allShippingHops]);
 
   // Size Quota summary for the selected month
   const quotaSummary = useMemo(() => {
@@ -630,6 +650,7 @@ export default function KanbanBoard() {
     setFormAgreedPrice("");
     setFormPaymentStatus("unpaid_deposit");
     setFormDepositAmount("");
+    setFormShippingPaid(false);
     setFormMonth(selectedMonth);
     setFormDueDate(`${selectedMonth}-20`);
     setFormDeliveryDate(`${selectedMonth}-25`);
@@ -652,6 +673,7 @@ export default function KanbanBoard() {
     setFormAgreedPrice(String(task.agreed_price ?? ""));
     setFormPaymentStatus(task.payment_status || "unpaid_deposit");
     setFormDepositAmount(String(task.deposit_amount ?? ""));
+    setFormShippingPaid(Boolean(task.shipping_paid));
     setFormMonth(task.month);
     setFormDueDate(task.due_date || "");
     setFormDeliveryDate(task.delivery_date || "");
@@ -702,6 +724,7 @@ export default function KanbanBoard() {
           agreed_price: agreedPriceNum,
           payment_status: formPaymentStatus,
           deposit_amount: depositNum,
+          shipping_paid: formShippingPaid,
           month: formMonth,
           due_date: formDueDate || null,
           delivery_date: formDeliveryDate || null,
@@ -720,6 +743,7 @@ export default function KanbanBoard() {
           agreed_price: agreedPriceNum,
           payment_status: formPaymentStatus,
           deposit_amount: depositNum,
+          shipping_paid: formShippingPaid,
           month: formMonth,
           due_date: formDueDate || null,
           delivery_date: formDeliveryDate || null,
@@ -752,10 +776,16 @@ export default function KanbanBoard() {
     }
   };
 
+  const getTaskCustomerShippingCost = (taskId: string) =>
+    allShippingHops
+      .filter((h) => h.task_id === taskId)
+      .reduce((sum, h) => sum + (Number(h.customer_cost) || 0), 0);
+
   const commitStatusChange = async (
     taskId: string,
     newStatus: TaskStatus,
-    alsoMarkPaid = false
+    alsoMarkPaid = false,
+    alsoMarkShippingPaid = false
   ) => {
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
@@ -765,12 +795,15 @@ export default function KanbanBoard() {
         ? selectedMonth
         : target.month;
 
-    const extraPayment: Partial<Task> = alsoMarkPaid
-      ? {
-          payment_status: "fully_paid",
-          deposit_amount: Number(target.agreed_price) || 0,
-        }
-      : {};
+    const extraPayment: Partial<Task> = {
+      ...(alsoMarkPaid
+        ? {
+            payment_status: "fully_paid",
+            deposit_amount: Number(target.agreed_price) || 0,
+          }
+        : {}),
+      ...(alsoMarkShippingPaid ? { shipping_paid: true } : {}),
+    };
 
     setTasks((prev) =>
       prev.map((t) =>
@@ -796,12 +829,16 @@ export default function KanbanBoard() {
     const target = tasks.find((t) => t.id === taskId);
     if (!target || target.status === newStatus) return;
 
-    if (newStatus === "delivered" && getRemainingBalance(target) > 0) {
+    const hasUnpaidWork = getRemainingBalance(target) > 0;
+    const custShipCost = getTaskCustomerShippingCost(target.id);
+    const hasUnpaidShipping = custShipCost > 0 && !target.shipping_paid;
+
+    if (newStatus === "delivered" && (hasUnpaidWork || hasUnpaidShipping)) {
       setPendingDeliveryTask(target);
       return;
     }
 
-    await commitStatusChange(taskId, newStatus, false);
+    await commitStatusChange(taskId, newStatus, false, false);
   };
 
   const handleMarkFullyPaid = async (task: Task) => {
@@ -818,6 +855,17 @@ export default function KanbanBoard() {
         payment_status: "fully_paid",
         deposit_amount: price,
       });
+    } catch {
+      await loadBoard(selectedMonth);
+    }
+  };
+
+  const handleToggleShippingPaid = async (task: Task, paid: boolean) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, shipping_paid: paid } : t))
+    );
+    try {
+      await updateTask(task.id, { shipping_paid: paid });
     } catch {
       await loadBoard(selectedMonth);
     }
@@ -1128,7 +1176,9 @@ export default function KanbanBoard() {
               ฿{formatTHB(stats.totalRemainingToCollect)}
             </p>
             <p className="text-[11px] text-[#77585e]/80 mt-0.5">
-              ยอดค้างชำระเมื่อส่งมอบ
+              {stats.totalRemainingShippingToCollect > 0
+                ? `ค่างาน ฿${formatTHB(stats.totalRemainingWorkToCollect)} • ค่าส่ง ฿${formatTHB(stats.totalRemainingShippingToCollect)}`
+                : "ยอดค้างชำระเมื่อส่งมอบ"}
             </p>
           </div>
 
@@ -1411,8 +1461,6 @@ export default function KanbanBoard() {
                         task.payment_status || "unpaid_deposit";
                       const remainingBalance = getRemainingBalance(task);
                       const isCarriedOver = task.month < selectedMonth;
-                      const isDeliveredButUnpaid =
-                        task.status === "delivered" && remainingBalance > 0;
                       const taskHops = allShippingHops
                         .filter((h) => h.task_id === task.id)
                         .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0));
@@ -1426,6 +1474,12 @@ export default function KanbanBoard() {
                       );
                       const taskHopTotalCost =
                         taskHopShopCost + taskHopCustCost;
+                      const hasCustomerShipping = taskHopCustCost > 0;
+                      const isShippingUnpaid =
+                        hasCustomerShipping && !task.shipping_paid;
+                      const isDeliveredButUnpaid =
+                        task.status === "delivered" &&
+                        (remainingBalance > 0 || isShippingUnpaid);
 
                       return (
                         <div
@@ -1468,6 +1522,12 @@ export default function KanbanBoard() {
                               {isCarriedOver && (
                                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#f3e8ff] text-[#5b3b8c] border border-[#d8b4fe]">
                                   ยกมาจาก {task.month}
+                                </span>
+                              )}
+
+                              {hasCustomerShipping && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#f3e8ff] text-[#5b3b8c] border border-[#d8b4fe]">
+                                  คิดค่าส่ง ฿{formatTHB(taskHopCustCost)}
                                 </span>
                               )}
 
@@ -1539,55 +1599,151 @@ export default function KanbanBoard() {
                           </div>
 
                           {/* Row 3: Compact Payment Summary */}
-                          {isDeliveredButUnpaid ? (
-                            <div className="p-2.5 rounded-xl bg-[#ffd590]/55 border border-[#cc8867] flex items-center justify-between gap-2">
-                              <div>
-                                <p className="text-[11px] font-bold text-[#ca5151]">
-                                  🚨 ส่งแล้ว • ยังไม่เก็บส่วนที่เหลือ
-                                </p>
-                                <p className="text-xs font-bold text-[#77585e] mt-0.5">
-                                  ค้างชำระ ฿{formatTHB(remainingBalance)}{" "}
-                                  <span className="font-normal text-[11px] text-[#77585e]/75">
-                                    (จาก ฿{formatTHB(agreedPrice)})
-                                  </span>
-                                </p>
+                          {task.status === "delivered" ? (
+                            <div
+                              className={`p-2.5 rounded-xl border space-y-1.5 ${
+                                isDeliveredButUnpaid
+                                  ? "bg-[#ffd590]/55 border-[#cc8867]"
+                                  : "bg-[#789ea5]/15 border-[#789ea5]/35"
+                              }`}
+                            >
+                              {/* Work Balance Status in Delivered Lane */}
+                              <div className="flex items-center justify-between gap-2">
+                                {remainingBalance > 0 ? (
+                                  <>
+                                    <div>
+                                      <p className="text-[11px] font-bold text-[#ca5151]">
+                                        🚨 ค่างานที่เหลือ: ยังไม่เก็บ
+                                      </p>
+                                      <p className="text-xs font-bold text-[#77585e]">
+                                        ค้าง ฿{formatTHB(remainingBalance)}{" "}
+                                        <span className="font-normal text-[10px] text-[#77585e]/75">
+                                          (จาก ฿{formatTHB(agreedPrice)})
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMarkFullyPaid(task)}
+                                      className="shrink-0 text-[11px] px-2 py-1 rounded-lg bg-[#ca5151] hover:bg-[#b03e3e] text-white font-bold shadow-sm transition"
+                                    >
+                                      เก็บค่างานแล้ว
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-[11px] text-[#4a6b72] font-bold">
+                                      ✓ ค่างานมัดจำที่เหลือ: เก็บครบแล้ว
+                                    </span>
+                                    <span className="text-xs font-bold text-[#77585e]">
+                                      ฿{formatTHB(agreedPrice)}
+                                    </span>
+                                  </>
+                                )}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleMarkFullyPaid(task)}
-                                className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg bg-[#ca5151] hover:bg-[#b03e3e] text-white font-bold shadow-sm transition"
-                              >
-                                รับครบแล้ว
-                              </button>
-                            </div>
-                          ) : remainingBalance === 0 ? (
-                            <div className="px-2.5 py-1.5 rounded-xl bg-[#789ea5]/15 border border-[#789ea5]/35 flex items-center justify-between text-xs">
-                              <span className="text-[#4a6b72] font-semibold">
-                                ชำระครบแล้ว
-                              </span>
-                              <span className="font-bold text-[#77585e]">
-                                ฿{formatTHB(agreedPrice)}
-                              </span>
+
+                              {/* Shipping Cost Collection Status in Delivered Lane */}
+                              <div className="pt-1 border-t border-[#77585e]/15 flex items-center justify-between gap-2">
+                                {hasCustomerShipping ? (
+                                  task.shipping_paid ? (
+                                    <>
+                                      <span className="text-[11px] text-[#4a6b72] font-bold">
+                                        ✓ ค่าส่งลูกค้าออก: เก็บแล้ว (฿
+                                        {formatTHB(taskHopCustCost)})
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleToggleShippingPaid(task, false)
+                                        }
+                                        className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-white/70 hover:bg-white text-[#77585e] border border-[#cc8867]/40 transition"
+                                      >
+                                        ยกเลิก
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-[11px] text-[#ca5151] font-bold">
+                                        🚨 ค่าส่งลูกค้าออก: ยังไม่เก็บ ฿
+                                        {formatTHB(taskHopCustCost)}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleToggleShippingPaid(task, true)
+                                        }
+                                        className="shrink-0 text-[11px] px-2 py-1 rounded-lg bg-[#5b3b8c] hover:bg-[#472c70] text-white font-bold shadow-sm transition"
+                                      >
+                                        เก็บค่าส่งแล้ว
+                                      </button>
+                                    </>
+                                  )
+                                ) : (
+                                  <span className="text-[11px] text-[#77585e]/70 font-medium">
+                                    ✓ ค่าส่ง: ไม่มีเก็บเพิ่มจากลูกค้า
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           ) : (
-                            <div className="p-2 rounded-xl bg-[#f3e8ff]/70 border border-[#d8b4fe] flex items-center justify-between gap-2">
-                              <div className="text-xs">
-                                <span className="text-[#5b3b8c] font-medium">
-                                  {paymentStatus === "deposit_paid"
-                                    ? "คงเหลือตอนส่ง: "
-                                    : "ยังไม่มัดจำ: "}
-                                </span>
-                                <span className="font-bold text-[#ca5151]">
-                                  ฿{formatTHB(remainingBalance)}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleMarkFullyPaid(task)}
-                                className="shrink-0 text-[11px] px-2 py-0.5 rounded-md bg-[#ca5151] hover:bg-[#b03e3e] text-white font-semibold transition"
-                              >
-                                รับครบ
-                              </button>
+                            <div className="space-y-1.5">
+                              {remainingBalance === 0 ? (
+                                <div className="px-2.5 py-1.5 rounded-xl bg-[#789ea5]/15 border border-[#789ea5]/35 flex items-center justify-between text-xs">
+                                  <span className="text-[#4a6b72] font-semibold">
+                                    ค่างานชำระครบแล้ว
+                                  </span>
+                                  <span className="font-bold text-[#77585e]">
+                                    ฿{formatTHB(agreedPrice)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="p-2 rounded-xl bg-[#f3e8ff]/70 border border-[#d8b4fe] flex items-center justify-between gap-2">
+                                  <div className="text-xs">
+                                    <span className="text-[#5b3b8c] font-medium">
+                                      {paymentStatus === "deposit_paid"
+                                        ? "คงเหลือตอนส่ง: "
+                                        : "ยังไม่มัดจำ: "}
+                                    </span>
+                                    <span className="font-bold text-[#ca5151]">
+                                      ฿{formatTHB(remainingBalance)}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkFullyPaid(task)}
+                                    className="shrink-0 text-[11px] px-2 py-0.5 rounded-md bg-[#ca5151] hover:bg-[#b03e3e] text-white font-semibold transition"
+                                  >
+                                    รับครบ
+                                  </button>
+                                </div>
+                              )}
+
+                              {hasCustomerShipping && (
+                                <div
+                                  className={`px-2.5 py-1.5 rounded-xl border flex items-center justify-between gap-2 text-[11px] ${
+                                    task.shipping_paid
+                                      ? "bg-[#789ea5]/15 border-[#789ea5]/35 text-[#4a6b72]"
+                                      : "bg-[#ffd590]/40 border-[#cc8867]/60 text-[#77585e]"
+                                  }`}
+                                >
+                                  <span className="font-semibold">
+                                    {task.shipping_paid
+                                      ? `✓ เก็บค่าส่งแล้ว: ฿${formatTHB(taskHopCustCost)}`
+                                      : `+ ค่าส่งที่ต้องเก็บเพิ่ม: ฿${formatTHB(taskHopCustCost)}`}
+                                  </span>
+                                  {!task.shipping_paid && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleToggleShippingPaid(task, true)
+                                      }
+                                      className="shrink-0 text-[10px] px-2 py-0.5 rounded-md bg-[#5b3b8c] hover:bg-[#472c70] text-white font-semibold transition"
+                                    >
+                                      เก็บค่าส่งแล้ว
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -1684,52 +1840,108 @@ export default function KanbanBoard() {
               </button>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-[#f9e1d3]/50 border border-[#cc8867]/40 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-[#77585e]">ราคาที่ตกลง:</span>
-                <span className="font-bold text-[#77585e]">
-                  ฿{formatTHB(pendingDeliveryTask.agreed_price)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm pt-1 border-t border-[#cc8867]/30">
-                <span className="font-bold text-[#ca5151]">
-                  ยอดที่ต้องเก็บเพิ่มตอนส่ง:
-                </span>
-                <span className="font-bold text-[#ca5151]">
-                  ฿{formatTHB(getRemainingBalance(pendingDeliveryTask))} บาท
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const workRem = getRemainingBalance(pendingDeliveryTask);
+              const custShip = getTaskCustomerShippingCost(
+                pendingDeliveryTask.id
+              );
+              const shipRem =
+                custShip > 0 && !pendingDeliveryTask.shipping_paid
+                  ? custShip
+                  : 0;
+              const totalRem = workRem + shipRem;
+              return (
+                <>
+                  <div className="p-3.5 rounded-xl bg-[#f9e1d3]/50 border border-[#cc8867]/40 text-xs space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-[#77585e]">ราคางานที่ตกลง:</span>
+                      <span className="font-bold text-[#77585e]">
+                        ฿{formatTHB(pendingDeliveryTask.agreed_price)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#77585e]">
+                        ค่างานที่ต้องเก็บเพิ่ม:
+                      </span>
+                      <span
+                        className={`font-bold ${
+                          workRem > 0 ? "text-[#ca5151]" : "text-[#4a6b72]"
+                        }`}
+                      >
+                        {workRem > 0
+                          ? `฿${formatTHB(workRem)}`
+                          : "เก็บครบแล้ว"}
+                      </span>
+                    </div>
+                    {custShip > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-[#5b3b8c]">
+                          ค่าส่งที่ลูกค้าออก (แยกจากราคางาน):
+                        </span>
+                        <span
+                          className={`font-bold ${
+                            shipRem > 0 ? "text-[#5b3b8c]" : "text-[#4a6b72]"
+                          }`}
+                        >
+                          {shipRem > 0
+                            ? `฿${formatTHB(shipRem)}`
+                            : "เก็บค่าส่งแล้ว"}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm pt-1.5 border-t border-[#cc8867]/30">
+                      <span className="font-bold text-[#ca5151]">
+                        รวมยอดต้องเก็บทั้งหมด:
+                      </span>
+                      <span className="font-bold text-[#ca5151]">
+                        ฿{formatTHB(totalRem)} บาท
+                      </span>
+                    </div>
+                  </div>
 
-            <p className="text-xs text-[#77585e] leading-relaxed">
-              คุณกำลังย้ายงานนี้ไปที่สถานะ <strong>&quot;ส่งแล้ว&quot;</strong>{" "}
-              ลูกค้าได้ชำระเงินส่วนที่เหลือครบเรียบร้อยแล้วหรือยังครับ?
-            </p>
+                  <p className="text-xs text-[#77585e] leading-relaxed">
+                    คุณกำลังย้ายงานนี้ไปที่สถานะ{" "}
+                    <strong>&quot;ส่งแล้ว&quot;</strong>{" "}
+                    ลูกค้าได้ชำระค่างานและค่าส่งครบเรียบร้อยแล้วหรือยังครับ?
+                  </p>
 
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              <button
-                type="button"
-                onClick={async () => {
-                  const t = pendingDeliveryTask;
-                  setPendingDeliveryTask(null);
-                  await commitStatusChange(t.id, "delivered", true);
-                }}
-                className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-[#ca5151] hover:bg-[#b03e3e] text-white shadow-md transition"
-              >
-                รับเงินครบแล้ว + ย้ายไปส่งแล้ว
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const t = pendingDeliveryTask;
-                  setPendingDeliveryTask(null);
-                  await commitStatusChange(t.id, "delivered", false);
-                }}
-                className="py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-[#ffd590]/60 hover:bg-[#ffd590] text-[#77585e] border border-[#cc8867] transition"
-              >
-                ยังไม่ได้รับ (ติดป้ายเตือนไว้)
-              </button>
-            </div>
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const t = pendingDeliveryTask;
+                        setPendingDeliveryTask(null);
+                        await commitStatusChange(
+                          t.id,
+                          "delivered",
+                          workRem > 0,
+                          shipRem > 0
+                        );
+                      }}
+                      className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-[#ca5151] hover:bg-[#b03e3e] text-white shadow-md transition"
+                    >
+                      รับครบทั้งหมดแล้ว + ย้ายไปส่งแล้ว
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const t = pendingDeliveryTask;
+                        setPendingDeliveryTask(null);
+                        await commitStatusChange(
+                          t.id,
+                          "delivered",
+                          false,
+                          false
+                        );
+                      }}
+                      className="py-2.5 px-3.5 rounded-xl text-xs font-semibold bg-[#ffd590]/60 hover:bg-[#ffd590] text-[#77585e] border border-[#cc8867] transition"
+                    >
+                      ยังไม่ได้รับ (ติดป้ายเตือนไว้)
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1984,19 +2196,55 @@ export default function KanbanBoard() {
                 </div>
 
                 {/* Auto-calculated Remaining Balance Banner */}
-                <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white border border-[#d8b4fe] text-xs">
-                  <span className="text-[#77585e] font-semibold">
-                    ยอดที่ต้องเก็บเพิ่มเมื่อส่งมอบงาน:
-                  </span>
-                  <span
-                    className={`text-sm font-bold ${
-                      modalRemainingPreview > 0
-                        ? "text-[#ca5151]"
-                        : "text-[#789ea5]"
-                    }`}
-                  >
-                    ฿{formatTHB(modalRemainingPreview)} บาท
-                  </span>
+                <div className="px-3 py-2 rounded-xl bg-white border border-[#d8b4fe] text-xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#77585e] font-semibold">
+                      ค่างานคงเหลือที่ต้องเก็บเพิ่ม:
+                    </span>
+                    <span
+                      className={`font-bold ${
+                        modalRemainingPreview > 0
+                          ? "text-[#ca5151]"
+                          : "text-[#789ea5]"
+                      }`}
+                    >
+                      ฿{formatTHB(modalRemainingPreview)} บาท
+                    </span>
+                  </div>
+                  {modalShippingTotals.customerTotal > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-[#5b3b8c] font-semibold">
+                          ค่าส่งที่ลูกค้าออก (
+                          {formShippingPaid ? "เก็บแล้ว" : "ต้องเก็บเพิ่ม"}):
+                        </span>
+                        <span
+                          className={`font-bold ${
+                            formShippingPaid
+                              ? "text-[#4a6b72]"
+                              : "text-[#5b3b8c]"
+                          }`}
+                        >
+                          ฿{formatTHB(modalShippingTotals.customerTotal)} บาท
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-[#d8b4fe]/60">
+                        <span className="text-[#77585e] font-bold">
+                          รวมยอดค้างเก็บทั้งหมด (ค่างาน + ค่าส่ง):
+                        </span>
+                        <span className="text-sm font-bold text-[#ca5151]">
+                          ฿
+                          {formatTHB(
+                            modalRemainingPreview +
+                              (formShippingPaid
+                                ? 0
+                                : modalShippingTotals.customerTotal)
+                          )}{" "}
+                          บาท
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -2284,14 +2532,37 @@ export default function KanbanBoard() {
                 )}
 
                 {formHops.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white border border-[#cc8867]/40 text-xs">
-                    <span className="font-bold text-[#77585e]">
-                      ค่าส่งรวมชิ้นนี้: ฿{formatTHB(modalShippingTotals.total)}
-                    </span>
-                    <span className="text-[11px] text-[#77585e]/85">
-                      ร้านออก ฿{formatTHB(modalShippingTotals.shopTotal)} •
-                      ลูกค้าออก ฿{formatTHB(modalShippingTotals.customerTotal)}
-                    </span>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white border border-[#cc8867]/40 text-xs">
+                      <span className="font-bold text-[#77585e]">
+                        ค่าส่งรวมชิ้นนี้: ฿{formatTHB(modalShippingTotals.total)}
+                      </span>
+                      <span className="text-[11px] text-[#77585e]/85">
+                        ร้านออก ฿{formatTHB(modalShippingTotals.shopTotal)} •
+                        ลูกค้าออก ฿{formatTHB(modalShippingTotals.customerTotal)}
+                      </span>
+                    </div>
+                    {modalShippingTotals.customerTotal > 0 && (
+                      <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#f3e8ff]/70 border border-[#d8b4fe] cursor-pointer text-xs">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={formShippingPaid}
+                            onChange={(e) =>
+                              setFormShippingPaid(e.target.checked)
+                            }
+                            className="w-4 h-4 accent-[#5b3b8c] rounded"
+                          />
+                          <span className="font-bold text-[#5b3b8c]">
+                            เก็บค่าส่งส่วนที่ลูกค้าออกแล้ว (฿
+                            {formatTHB(modalShippingTotals.customerTotal)})
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-[#5b3b8c] border border-[#d8b4fe]">
+                          TAG: คิดค่าส่ง
+                        </span>
+                      </label>
+                    )}
                   </div>
                 )}
               </div>

@@ -50,6 +50,7 @@ export interface Task {
   agreed_price: number;
   payment_status: PaymentStatus;
   deposit_amount: number;
+  shipping_paid: boolean;
   month: string; // Format: "YYYY-MM"
   due_date: string | null;
   delivery_date: string | null;
@@ -71,6 +72,7 @@ export interface CreateTaskInput {
   agreed_price: number;
   payment_status: PaymentStatus;
   deposit_amount: number;
+  shipping_paid?: boolean;
   month: string;
   due_date: string | null;
   delivery_date: string | null;
