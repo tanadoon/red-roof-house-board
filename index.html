@@ -633,6 +633,11 @@
         }
       };
 
+      const getTaskCustomerShippingCost = (taskId) =>
+        allShippingHops
+          .filter((h) => h.task_id === taskId)
+          .reduce((sum, h) => sum + (Number(h.customer_cost) || 0), 0);
+
       const filteredTasks = useMemo(() => {
         return tasks.filter((task) => {
           if (searchQuery.trim()) {
@@ -662,11 +667,6 @@
           return true;
         });
       }, [tasks, allShippingHops, searchQuery, priorityFilter, sizeFilter, paymentFilter, onlyOverdue]);
-
-      const getTaskCustomerShippingCost = (taskId) =>
-        allShippingHops
-          .filter((h) => h.task_id === taskId)
-          .reduce((sum, h) => sum + (Number(h.customer_cost) || 0), 0);
 
       const stats = useMemo(() => {
         const total = tasks.length;
