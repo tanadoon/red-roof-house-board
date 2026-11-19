@@ -80,3 +80,44 @@ export interface SupabaseConfig {
   url: string;
   anonKey: string;
 }
+
+export type ShippingType = "normal" | "special";
+
+export const SHIPPING_CARRIERS = [
+  "Flash",
+  "KEX",
+  "J&T",
+  "ไปรษณีย์ไทย (ธรรมดา)",
+  "ไปรษณีย์ไทย (EMS)",
+  "นครชัยแอร์",
+  "Grab",
+  "Lalamove",
+  "DHL",
+  "อื่นๆ",
+] as const;
+
+export interface ShippingHop {
+  id: string;
+  task_id: string;
+  hop_order: number;
+  carrier: string;
+  shipping_type: ShippingType;
+  route_note: string;
+  tracking_no: string;
+  shop_cost: number;
+  customer_cost: number;
+  shipped_at: string; // YYYY-MM-DD
+  created_at?: string;
+}
+
+export interface ShippingHopDraft {
+  id?: string;
+  hop_order: number;
+  carrier: string;
+  shipping_type: ShippingType;
+  route_note: string;
+  tracking_no: string;
+  shop_cost: number;
+  customer_cost: number;
+  shipped_at: string;
+}

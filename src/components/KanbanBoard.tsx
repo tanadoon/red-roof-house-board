@@ -19,6 +19,10 @@ import {
   DEFAULT_WORK_SIZES,
   PaymentStatus,
   QuotaMap,
+  SHIPPING_CARRIERS,
+  ShippingHop,
+  ShippingHopDraft,
+  ShippingType,
   Task,
   TaskPriority,
   TaskStatus,
@@ -27,10 +31,12 @@ import {
 import {
   createTask,
   deleteTask,
+  fetchAllShippingHops,
   fetchQuotas,
   fetchTasksByMonth,
   getDefaultQuotas,
   loadQuotas,
+  replaceTaskShippingHops,
   subscribeToRealtimeChanges,
   updateQuota,
   updateTask,
@@ -221,6 +227,7 @@ function getRemainingBalance(task: {
 export default function KanbanBoard() {
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthStr);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [allShippingHops, setAllShippingHops] = useState<ShippingHop[]>([]);
   const [quotas, setQuotas] = useState<QuotaMap>(getDefaultQuotas);
   const [isEditingQuotas, setIsEditingQuotas] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -263,6 +270,7 @@ export default function KanbanBoard() {
   const [formMonth, setFormMonth] = useState<string>(selectedMonth);
   const [formDueDate, setFormDueDate] = useState<string>("");
   const [formDeliveryDate, setFormDeliveryDate] = useState<string>("");
+  const [formHops, setFormHops] = useState<ShippingHopDraft[]>([]);
 
   const loadBoard = async (monthToLoad = selectedMonth) => {
     setLoading(true);
@@ -285,6 +293,7 @@ export default function KanbanBoard() {
   useEffect(() => {
     setQuotas(loadQuotas());
     fetchQuotas().then(setQuotas).catch(() => {});
+    fetchAllShippingHops().then(setAllShippingHops).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -298,6 +307,9 @@ export default function KanbanBoard() {
         .catch(() => {});
       fetchQuotas()
         .then(setQuotas)
+        .catch(() => {});
+      fetchAllShippingHops()
+        .then(setAllShippingHops)
         .catch(() => {});
     });
 
@@ -409,6 +421,146 @@ export default function KanbanBoard() {
     });
   }, [tasks, quotas]);
 
+  const monthlyShippingStats = useMemo(() => {
+    const monthHops = allShippingHops.filter((h) =>
+      (h.shipped_at || "").startsWith(selectedMonth)
+    );
+    const shopTotal = monthHops.reduce(
+      (s, h) => s + (Number(h.shop_cost) || 0),
+      0
+    );
+    const customerTotal = monthHops.reduce(
+      (s, h) => s + (Number(h.customer_cost) || 0),
+      0
+    );
+    return {
+      total: shopTotal + customerTotal,
+      shopTotal,
+      customerTotal,
+      hopCount: monthHops.length,
+    };
+  }, [allShippingHops, selectedMonth]);
+
+  const modalShippingTotals = useMemo(() => {
+    const shopTotal = formHops.reduce(
+      (s, h) => s + (Number(h.shop_cost) || 0),
+      0
+    );
+    const customerTotal = formHops.reduce(
+      (s, h) => s + (Number(h.customer_cost) || 0),
+      0
+    );
+    return { shopTotal, customerTotal, total: shopTotal + customerTotal };
+  }, [formHops]);
+
+  const addEmptyHop = (
+    carrier = "Flash",
+    shippingType: ShippingType = "normal",
+    routeNote = ""
+  ) => {
+    setFormHops((prev) => [
+      ...prev,
+      {
+        hop_order: prev.length + 1,
+        carrier,
+        shipping_type: shippingType,
+        route_note: routeNote,
+        tracking_no: "",
+        shop_cost: 0,
+        customer_cost: 0,
+        shipped_at: getTodayStr(),
+      },
+    ]);
+  };
+
+  const applyShippingPreset = (presetType: "normal" | "nca_grab" | "inter") => {
+    const today = getTodayStr();
+    if (presetType === "normal") {
+      setFormHops([
+        {
+          hop_order: 1,
+          carrier: "Flash",
+          shipping_type: "normal",
+          route_note: "ร้าน → ลูกค้า",
+          tracking_no: "",
+          shop_cost: 0,
+          customer_cost: 0,
+          shipped_at: today,
+        },
+      ]);
+    } else if (presetType === "nca_grab") {
+      setFormHops([
+        {
+          hop_order: 1,
+          carrier: "นครชัยแอร์",
+          shipping_type: "special",
+          route_note: "ร้าน → กรุงเทพฯ",
+          tracking_no: "",
+          shop_cost: 0,
+          customer_cost: 0,
+          shipped_at: today,
+        },
+        {
+          hop_order: 2,
+          carrier: "Grab",
+          shipping_type: "special",
+          route_note: "กรุงเทพฯ → ลูกค้า",
+          tracking_no: "",
+          shop_cost: 0,
+          customer_cost: 0,
+          shipped_at: today,
+        },
+      ]);
+    } else if (presetType === "inter") {
+      setFormHops([
+        {
+          hop_order: 1,
+          carrier: "นครชัยแอร์",
+          shipping_type: "special",
+          route_note: "ร้าน → กรุงเทพฯ",
+          tracking_no: "",
+          shop_cost: 0,
+          customer_cost: 0,
+          shipped_at: today,
+        },
+        {
+          hop_order: 2,
+          carrier: "Lalamove",
+          shipping_type: "special",
+          route_note: "กรุงเทพฯ → บ้านน้องดุล",
+          tracking_no: "",
+          shop_cost: 0,
+          customer_cost: 0,
+          shipped_at: today,
+        },
+        {
+          hop_order: 3,
+          carrier: "DHL",
+          shipping_type: "special",
+          route_note: "ไทย → ต่างประเทศ",
+          tracking_no: "",
+          shop_cost: 0,
+          customer_cost: 0,
+          shipped_at: today,
+        },
+      ]);
+    }
+  };
+
+  const updateHopField = (
+    idx: number,
+    field: keyof ShippingHopDraft,
+    value: string | number
+  ) => {
+    setFormHops((prev) =>
+      prev.map((h, i) => (i === idx ? { ...h, [field]: value } : h))
+    );
+  };
+
+  const removeHop = (idx: number) => {
+    setFormHops((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   // Open Modal for New Task
   const openCreateModal = (defaultStatus: TaskStatus = "todo") => {
     setEditingTask(null);
@@ -427,6 +579,7 @@ export default function KanbanBoard() {
     setFormMonth(selectedMonth);
     setFormDueDate(`${selectedMonth}-20`);
     setFormDeliveryDate(`${selectedMonth}-25`);
+    setFormHops([]);
     setIsTaskModalOpen(true);
   };
 
@@ -448,6 +601,10 @@ export default function KanbanBoard() {
     setFormMonth(task.month);
     setFormDueDate(task.due_date || "");
     setFormDeliveryDate(task.delivery_date || "");
+    const existingHops = allShippingHops
+      .filter((h) => h.task_id === task.id)
+      .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0));
+    setFormHops(existingHops);
     setIsTaskModalOpen(true);
   };
 
@@ -472,6 +629,7 @@ export default function KanbanBoard() {
         : Math.min(agreedPriceNum, Math.max(0, Number(formDepositAmount) || 0));
 
     try {
+      let savedTaskId = editingTask ? editingTask.id : "";
       if (editingTask) {
         await updateTask(editingTask.id, {
           title: formTitle.trim(),
@@ -508,10 +666,17 @@ export default function KanbanBoard() {
           due_date: formDueDate || null,
           delivery_date: formDeliveryDate || null,
         };
-        await createTask(payload);
+        const created = await createTask(payload);
+        savedTaskId = created.id;
       }
+
+      if (savedTaskId) {
+        await replaceTaskShippingHops(savedTaskId, formHops);
+      }
+
       setIsTaskModalOpen(false);
       await loadBoard(selectedMonth);
+      fetchAllShippingHops().then(setAllShippingHops).catch(() => {});
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "ไม่สามารถบันทึกงานได้");
     }
@@ -853,7 +1018,7 @@ export default function KanbanBoard() {
         </div>
 
         {/* Overall Progress & Financial Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
           <div className="bg-white/90 border border-[#789ea5]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-[#77585e] font-semibold mb-1.5">
               <span>ส่งงานแล้วเดือนนี้</span>
@@ -954,6 +1119,25 @@ export default function KanbanBoard() {
               </p>
             </div>
             {stats.overdue > 0 && <span className="text-2xl">🚨</span>}
+          </div>
+
+          {/* Monthly Shipping Cost Card (by actual shipped_at date) */}
+          <div className="col-span-2 lg:col-span-1 bg-white/90 border border-[#cc8867]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between gap-1">
+              <p className="text-xs text-[#77585e] font-semibold">
+                ค่าขนส่งเดือนนี้ (วันส่งจริง)
+              </p>
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#f9e1d3] text-[#77585e]">
+                {monthlyShippingStats.hopCount} ขั้น
+              </span>
+            </div>
+            <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
+              ฿{formatTHB(monthlyShippingStats.total)}
+            </p>
+            <p className="text-[11px] text-[#77585e]/80 mt-0.5">
+              ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)} • ลูกค้า ฿
+              {formatTHB(monthlyShippingStats.customerTotal)}
+            </p>
           </div>
         </div>
 
@@ -1171,6 +1355,19 @@ export default function KanbanBoard() {
                       const isCarriedOver = task.month < selectedMonth;
                       const isDeliveredButUnpaid =
                         task.status === "delivered" && remainingBalance > 0;
+                      const taskHops = allShippingHops
+                        .filter((h) => h.task_id === task.id)
+                        .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0));
+                      const taskHopShopCost = taskHops.reduce(
+                        (s, h) => s + (Number(h.shop_cost) || 0),
+                        0
+                      );
+                      const taskHopCustCost = taskHops.reduce(
+                        (s, h) => s + (Number(h.customer_cost) || 0),
+                        0
+                      );
+                      const taskHopTotalCost =
+                        taskHopShopCost + taskHopCustCost;
 
                       return (
                         <div
@@ -1336,7 +1533,31 @@ export default function KanbanBoard() {
                             </div>
                           )}
 
-                          {/* Row 4: Footer (Short Delivery Date + Status Dropdown) */}
+                          {/* Row 4: Compact Shipping Hops Summary */}
+                          {taskHops.length > 0 && (
+                            <div
+                              onClick={() => openEditModal(task)}
+                              className="px-2.5 py-1.5 rounded-xl bg-[#f9e1d3]/45 border border-[#cc8867]/35 text-[11px] cursor-pointer hover:bg-[#f9e1d3]/75 transition"
+                            >
+                              <div className="flex items-center justify-between gap-1 font-semibold text-[#77585e]">
+                                <span className="truncate">
+                                  ขนส่ง:{" "}
+                                  {taskHops.map((h) => h.carrier).join(" → ")}
+                                </span>
+                                <span className="shrink-0 font-bold text-[#ca5151]">
+                                  ฿{formatTHB(taskHopTotalCost)}
+                                </span>
+                              </div>
+                              {(taskHopShopCost > 0 || taskHopCustCost > 0) && (
+                                <div className="text-[10px] text-[#77585e]/80 mt-0.5">
+                                  ร้านออก ฿{formatTHB(taskHopShopCost)} •
+                                  ลูกค้าออก ฿{formatTHB(taskHopCustCost)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Row 5: Footer (Short Delivery Date + Status Dropdown) */}
                           <div className="pt-2 border-t border-[#f9e1d3] flex items-center justify-between gap-2">
                             <span
                               className={`text-[11px] shrink-0 ${
@@ -1771,6 +1992,226 @@ export default function KanbanBoard() {
                   placeholder="จดบันทึกบรีฟลูกค้า สีกรอบ หรือข้อความการ์ด..."
                   className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
                 />
+              </div>
+
+              {/* Multi-Hop Shipping Log Section */}
+              <div className="p-3.5 rounded-2xl bg-[#fdf7f2] border border-[#cc8867]/40 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-bold text-[#77585e]">
+                      ประวัติการจัดส่ง &amp; ค่าขนส่ง ({formHops.length} ขั้น)
+                    </span>
+                    <p className="text-[11px] text-[#77585e]/75">
+                      บันทึกได้หลายต่อ (นับยอดรายเดือนตามวันที่ส่งจริงของแต่ละขั้น)
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      addEmptyHop(
+                        "Flash",
+                        formHops.length > 0 ? "special" : "normal",
+                        ""
+                      )
+                    }
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#789ea5] hover:bg-[#61838a] text-white transition"
+                  >
+                    + เพิ่มขั้นขนส่ง
+                  </button>
+                </div>
+
+                {/* Quick Preset Templates */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[10px] text-[#77585e]/70 self-center mr-1">
+                    เทมเพลตด่วน:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => applyShippingPreset("normal")}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-[#f9e1d3] text-[#77585e] hover:border-[#ca5151]"
+                  >
+                    + ปกติ (Flash)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyShippingPreset("nca_grab")}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-[#f9e1d3] text-[#77585e] hover:border-[#ca5151]"
+                  >
+                    + นครชัยแอร์ → Grab
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyShippingPreset("inter")}
+                    className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-[#f9e1d3] text-[#77585e] hover:border-[#ca5151]"
+                  >
+                    + ตปท. (NCA → Lalamove → DHL)
+                  </button>
+                </div>
+
+                {formHops.length === 0 ? (
+                  <div className="text-center py-3 text-xs text-[#77585e]/60 bg-white/70 rounded-xl border border-dashed border-[#cc8867]/30">
+                    ยังไม่มีบันทึกการจัดส่ง กด &quot;+ เพิ่มขั้นขนส่ง&quot; หรือเลือกเทมเพลตด้านบน
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {formHops.map((hop, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-xl bg-white border border-[#f9e1d3] space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-[#ca5151]">
+                            ขั้นที่ {idx + 1} (Hop {idx + 1})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeHop(idx)}
+                            className="text-[11px] text-[#ca5151] hover:underline font-semibold"
+                          >
+                            ลบขั้นนี้
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
+                              ขนส่ง
+                            </label>
+                            <select
+                              value={hop.carrier}
+                              onChange={(e) =>
+                                updateHopField(idx, "carrier", e.target.value)
+                              }
+                              className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2 py-1.5 text-xs font-semibold text-[#4a3539]"
+                            >
+                              {SHIPPING_CARRIERS.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
+                              ประเภทการส่ง
+                            </label>
+                            <select
+                              value={hop.shipping_type}
+                              onChange={(e) =>
+                                updateHopField(
+                                  idx,
+                                  "shipping_type",
+                                  e.target.value as ShippingType
+                                )
+                              }
+                              className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2 py-1.5 text-xs font-semibold text-[#4a3539]"
+                            >
+                              <option value="normal">ปกติ</option>
+                              <option value="special">ด่วน / พิเศษ</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
+                              วันที่ส่งจริง
+                            </label>
+                            <input
+                              type="date"
+                              value={hop.shipped_at || ""}
+                              onChange={(e) =>
+                                updateHopField(idx, "shipped_at", e.target.value)
+                              }
+                              className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2 py-1.5 text-xs text-[#4a3539]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
+                              เส้นทาง / หมายเหตุ
+                            </label>
+                            <input
+                              type="text"
+                              value={hop.route_note || ""}
+                              onChange={(e) =>
+                                updateHopField(idx, "route_note", e.target.value)
+                              }
+                              placeholder="เช่น ร้าน → กทม. หรือ ส่งไปสิงคโปร์"
+                              className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2.5 py-1.5 text-xs text-[#4a3539]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
+                              เลขพัสดุ (Tracking)
+                            </label>
+                            <input
+                              type="text"
+                              value={hop.tracking_no || ""}
+                              onChange={(e) =>
+                                updateHopField(idx, "tracking_no", e.target.value)
+                              }
+                              placeholder="เลขพัสดุ / ลิงก์ Grab (ถ้ามี)"
+                              className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2.5 py-1.5 text-xs text-[#4a3539]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
+                              ร้านออก (บาท)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={hop.shop_cost}
+                              onChange={(e) =>
+                                updateHopField(idx, "shop_cost", e.target.value)
+                              }
+                              placeholder="0"
+                              className="w-full bg-[#f9e1d3]/35 border border-[#cc8867]/40 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#4a3539]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#5b3b8c] mb-0.5">
+                              ลูกค้าออก (บาท)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={hop.customer_cost}
+                              onChange={(e) =>
+                                updateHopField(
+                                  idx,
+                                  "customer_cost",
+                                  e.target.value
+                                )
+                              }
+                              placeholder="0"
+                              className="w-full bg-[#f3e8ff]/60 border border-[#d8b4fe] rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#4a3539]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {formHops.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white border border-[#cc8867]/40 text-xs">
+                    <span className="font-bold text-[#77585e]">
+                      ค่าส่งรวมชิ้นนี้: ฿{formatTHB(modalShippingTotals.total)}
+                    </span>
+                    <span className="text-[11px] text-[#77585e]/85">
+                      ร้านออก ฿{formatTHB(modalShippingTotals.shopTotal)} •
+                      ลูกค้าออก ฿{formatTHB(modalShippingTotals.customerTotal)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-[#f9e1d3]">

@@ -40,3 +40,20 @@ values
   ('35x35 cm', 10),
   ('อื่นๆ', 10)
 on conflict (work_size) do nothing;
+
+create table if not exists public.shipping_hops (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  hop_order integer not null default 1,
+  carrier text not null default 'Flash',
+  shipping_type text not null check (shipping_type in ('normal', 'special')) default 'normal',
+  route_note text not null default '',
+  tracking_no text not null default '',
+  shop_cost numeric(12, 2) not null default 0,
+  customer_cost numeric(12, 2) not null default 0,
+  shipped_at date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_shipping_hops_task_id on public.shipping_hops (task_id);
+create index if not exists idx_shipping_hops_shipped_at on public.shipping_hops (shipped_at);

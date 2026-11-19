@@ -3,6 +3,8 @@ import {
   CreateTaskInput,
   DEFAULT_WORK_SIZES,
   QuotaMap,
+  ShippingHop,
+  ShippingHopDraft,
   SupabaseConfig,
   Task,
   WorkSize,
@@ -10,6 +12,7 @@ import {
 
 const LOCAL_TASKS_KEY = "red_roof_house_tasks_v4";
 const LOCAL_QUOTAS_KEY = "red_roof_house_quotas_v2";
+const LOCAL_HOPS_KEY = "red_roof_house_shipping_hops_v1";
 const LOCAL_SUPABASE_CONFIG_KEY = "kanban_supabase_config_v1";
 
 const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
@@ -104,7 +107,11 @@ export async function updateQuota(
 export function subscribeToRealtimeChanges(onUpdate: () => void): () => void {
   const client = getSupabaseClient();
   const handleStorage = (e: StorageEvent) => {
-    if (e.key === LOCAL_TASKS_KEY || e.key === LOCAL_QUOTAS_KEY) {
+    if (
+      e.key === LOCAL_TASKS_KEY ||
+      e.key === LOCAL_QUOTAS_KEY ||
+      e.key === LOCAL_HOPS_KEY
+    ) {
       onUpdate();
     }
   };
@@ -140,6 +147,13 @@ export function subscribeToRealtimeChanges(onUpdate: () => void): () => void {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "size_quotas" },
+      () => {
+        onUpdate();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "shipping_hops" },
       () => {
         onUpdate();
       }
@@ -528,4 +542,77 @@ export async function deleteTask(id: string): Promise<void> {
 
   const allLocal = loadLocalTasks();
   saveLocalTasks(allLocal.filter((t) => t.id !== id));
+}
+
+export function loadLocalShippingHops(): ShippingHop[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_HOPS_KEY);
+    return raw ? (JSON.parse(raw) as ShippingHop[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalShippingHops(hops: ShippingHop[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LOCAL_HOPS_KEY, JSON.stringify(hops));
+}
+
+export async function fetchAllShippingHops(): Promise<ShippingHop[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    const { data, error } = await client
+      .from("shipping_hops")
+      .select("*")
+      .order("hop_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (!error && data) {
+      return data as ShippingHop[];
+    }
+  }
+  return loadLocalShippingHops();
+}
+
+export async function replaceTaskShippingHops(
+  taskId: string,
+  drafts: ShippingHopDraft[]
+): Promise<ShippingHop[]> {
+  const normalized = drafts.map((d, idx) => ({
+    task_id: taskId,
+    hop_order: idx + 1,
+    carrier: d.carrier || "Flash",
+    shipping_type: d.shipping_type || "normal",
+    route_note: (d.route_note || "").trim(),
+    tracking_no: (d.tracking_no || "").trim(),
+    shop_cost: Math.max(0, Number(d.shop_cost) || 0),
+    customer_cost: Math.max(0, Number(d.customer_cost) || 0),
+    shipped_at: d.shipped_at || new Date().toISOString().slice(0, 10),
+  }));
+
+  const client = getSupabaseClient();
+  if (client) {
+    const { error: delErr } = await client
+      .from("shipping_hops")
+      .delete()
+      .eq("task_id", taskId);
+    if (delErr) throw new Error(delErr.message);
+
+    if (normalized.length === 0) return [];
+    const { data, error: insErr } = await client
+      .from("shipping_hops")
+      .insert(normalized)
+      .select();
+    if (insErr) throw new Error(insErr.message);
+    return (data as ShippingHop[]) || [];
+  }
+
+  const others = loadLocalShippingHops().filter((h) => h.task_id !== taskId);
+  const created: ShippingHop[] = normalized.map((n, idx) => ({
+    ...n,
+    id: `hop-${Date.now()}-${idx}`,
+    created_at: new Date().toISOString(),
+  }));
+  saveLocalShippingHops([...others, ...created]);
+  return created;
 }
