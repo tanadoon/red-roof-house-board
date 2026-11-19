@@ -844,16 +844,16 @@ export default function KanbanBoard() {
 
         {/* Overall Progress & Financial Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-          <div className="bg-white/90 border border-[#ffc0b8] rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+          <div className="bg-white/90 border border-[#789ea5]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-[#77585e] font-semibold mb-1.5">
               <span>ส่งงานแล้วเดือนนี้</span>
-              <span className="font-bold text-[#ca5151] text-sm">
+              <span className="font-bold text-[#5d878f] text-sm">
                 {stats.percent}%
               </span>
             </div>
-            <div className="w-full h-2.5 bg-[#f9e1d3] rounded-full overflow-hidden">
+            <div className="w-full h-2.5 bg-[#789ea5]/20 rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#ca5151] transition-all duration-300"
+                className="h-full bg-[#789ea5] transition-all duration-300"
                 style={{ width: `${stats.percent}%` }}
               />
             </div>
