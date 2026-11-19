@@ -690,8 +690,7 @@ export default function KanbanBoard() {
         }
 
         return { ...h, [field]: value };
-      })
-    );
+      });
     });
   };
 
