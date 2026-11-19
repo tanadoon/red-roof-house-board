@@ -94,9 +94,9 @@ const COLUMNS: {
   {
     id: "delivered",
     title: "ส่งแล้ว",
-    accent: "border-t-[#2e9e6f]",
-    headerBg: "bg-emerald-50",
-    badgeBg: "bg-[#2e9e6f] text-white border border-[#227d57]",
+    accent: "border-t-[#6b9078]",
+    headerBg: "bg-[#6b9078]/15",
+    badgeBg: "bg-[#6b9078] text-white border border-[#557560]",
   },
 ];
 
@@ -1559,7 +1559,7 @@ export default function KanbanBoard() {
                             isDeliveredButUnpaid
                               ? "border-2 border-[#cc8867] bg-[#ffd590]/20"
                               : task.status === "delivered"
-                              ? "border-emerald-300 bg-emerald-50/40 hover:border-emerald-400"
+                              ? "border-[#6b9078]/45 bg-[#6b9078]/[0.06] hover:border-[#6b9078]/70"
                               : dueState === "overdue"
                               ? "border-[#ca5151] bg-[#ffc0b8]/20 ring-1 ring-[#ca5151]/20"
                               : "bg-white border-[#f9e1d3] hover:border-[#cc8867]"
@@ -1671,7 +1671,7 @@ export default function KanbanBoard() {
                               className={`p-2.5 rounded-xl border space-y-1.5 ${
                                 isDeliveredButUnpaid
                                   ? "bg-[#ffd590]/55 border-[#cc8867]"
-                                  : "bg-emerald-50 border-emerald-200"
+                                  : "bg-[#6b9078]/12 border-[#6b9078]/35"
                               }`}
                             >
                               {/* Work Balance Status in Delivered Lane */}
