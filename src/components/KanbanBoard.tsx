@@ -2144,8 +2144,7 @@ export default function KanbanBoard() {
                   >
                     {DEFAULT_WORK_SIZES.map((size) => {
                       const used = tasks.filter(
-                        (t) =>
-                          t.work_size === size && t.id !== editingTask?.id
+                        (t) => (t.work_size || "A4") === size
                       ).length;
                       const max = quotas[size] ?? 10;
                       return (
