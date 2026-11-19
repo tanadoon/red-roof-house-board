@@ -240,6 +240,9 @@ export default function KanbanBoard() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">("all");
   const [sizeFilter, setSizeFilter] = useState<WorkSize | "all">("all");
+  const [paymentFilter, setPaymentFilter] = useState<
+    "all" | "paid_all" | "unpaid_any"
+  >("all");
   const [onlyOverdue, setOnlyOverdue] = useState<boolean>(false);
 
   // Drag state
@@ -361,6 +364,16 @@ export default function KanbanBoard() {
       if (sizeFilter !== "all" && task.work_size !== sizeFilter) {
         return false;
       }
+      if (paymentFilter !== "all") {
+        const workUnpaid = getRemainingBalance(task) > 0;
+        const custShip = allShippingHops
+          .filter((h) => h.task_id === task.id)
+          .reduce((s, h) => s + (Number(h.customer_cost) || 0), 0);
+        const shipUnpaid = custShip > 0 && !task.shipping_paid;
+        const isAllPaid = !workUnpaid && !shipUnpaid;
+        if (paymentFilter === "paid_all" && !isAllPaid) return false;
+        if (paymentFilter === "unpaid_any" && isAllPaid) return false;
+      }
       if (onlyOverdue) {
         const checkDate = task.delivery_date || task.due_date;
         if (getDueStatus(checkDate, task.status) !== "overdue") {
@@ -369,7 +382,15 @@ export default function KanbanBoard() {
       }
       return true;
     });
-  }, [tasks, searchQuery, priorityFilter, sizeFilter, onlyOverdue]);
+  }, [
+    tasks,
+    allShippingHops,
+    searchQuery,
+    priorityFilter,
+    sizeFilter,
+    paymentFilter,
+    onlyOverdue,
+  ]);
 
   // Monthly statistics & financial summary
   const stats = useMemo(() => {
@@ -871,6 +892,23 @@ export default function KanbanBoard() {
     }
   };
 
+  const handleMarkAllPaid = async (task: Task) => {
+    const price = Number(task.agreed_price) || 0;
+    const updates: Partial<Task> = {
+      payment_status: "fully_paid",
+      deposit_amount: price,
+      shipping_paid: true,
+    };
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, ...updates } : t))
+    );
+    try {
+      await updateTask(task.id, updates);
+    } catch {
+      await loadBoard(selectedMonth);
+    }
+  };
+
   const onDragStart = (e: React.DragEvent, taskId: string) => {
     setDraggedTaskId(taskId);
     e.dataTransfer.setData("text/plain", taskId);
@@ -1313,15 +1351,42 @@ export default function KanbanBoard() {
               </select>
             </div>
 
+            <div className="flex items-center gap-1.5 bg-[#ffd590]/45 border border-[#cc8867]/50 rounded-xl px-2.5 py-1.5">
+              <span className="text-xs text-[#77585e] font-medium">
+                การชำระเงิน:
+              </span>
+              <select
+                value={paymentFilter}
+                onChange={(e) =>
+                  setPaymentFilter(
+                    e.target.value as "all" | "paid_all" | "unpaid_any"
+                  )
+                }
+                className="bg-transparent text-xs font-bold text-[#77585e] focus:outline-none"
+              >
+                <option value="all" className="bg-white">
+                  ทั้งหมด
+                </option>
+                <option value="paid_all" className="bg-white">
+                  ✓ จ่ายครบทุกอย่างแล้ว
+                </option>
+                <option value="unpaid_any" className="bg-white">
+                  🚨 ยังไม่จ่ายค่าสินค้า / ค่าส่ง
+                </option>
+              </select>
+            </div>
+
             {(searchQuery ||
               priorityFilter !== "all" ||
               sizeFilter !== "all" ||
+              paymentFilter !== "all" ||
               onlyOverdue) && (
               <button
                 onClick={() => {
                   setSearchQuery("");
                   setPriorityFilter("all");
                   setSizeFilter("all");
+                  setPaymentFilter("all");
                   setOnlyOverdue(false);
                 }}
                 className="text-xs text-[#ca5151] hover:text-[#77585e] underline px-2 font-semibold"
@@ -1684,6 +1749,24 @@ export default function KanbanBoard() {
                                   </span>
                                 )}
                               </div>
+
+                              {remainingBalance > 0 && isShippingUnpaid && (
+                                <div className="pt-1.5 border-t border-[#cc8867]/40 flex items-center justify-between gap-2">
+                                  <span className="text-[11px] font-bold text-[#ca5151]">
+                                    รวมเก็บก้อนเดียว: ฿
+                                    {formatTHB(
+                                      remainingBalance + taskHopCustCost
+                                    )}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkAllPaid(task)}
+                                    className="shrink-0 text-[11px] px-2.5 py-1 rounded-lg bg-[#ca5151] hover:bg-[#b03e3e] text-white font-bold shadow-sm transition"
+                                  >
+                                    รับครบทั้งก้อน
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="space-y-1.5">
@@ -1743,6 +1826,20 @@ export default function KanbanBoard() {
                                     </button>
                                   )}
                                 </div>
+                              )}
+
+                              {remainingBalance > 0 && isShippingUnpaid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkAllPaid(task)}
+                                  className="w-full py-1 px-2.5 rounded-lg bg-[#ca5151] hover:bg-[#b03e3e] text-white text-[11px] font-bold shadow-sm transition"
+                                >
+                                  รับครบทั้งก้อน (ค่างาน + ค่าส่ง ฿
+                                  {formatTHB(
+                                    remainingBalance + taskHopCustCost
+                                  )}
+                                  )
+                                </button>
                               )}
                             </div>
                           )}
