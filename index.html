@@ -732,6 +732,7 @@
             shipping_type: shippingType,
             route_note: routeNote,
             tracking_no: "",
+            total_cost: "",
             shop_cost: "",
             customer_cost: "",
             shipped_at: getTodayStr(),
@@ -743,25 +744,63 @@
         const today = getTodayStr();
         if (presetType === "normal") {
           setFormHops([
-            { hop_order: 1, carrier: "Flash", shipping_type: "normal", route_note: "ร้าน → ลูกค้า", tracking_no: "", shop_cost: "", customer_cost: "", shipped_at: today },
+            { hop_order: 1, carrier: "Flash", shipping_type: "normal", route_note: "ร้าน → ลูกค้า", tracking_no: "", total_cost: "", shop_cost: "", customer_cost: "", shipped_at: today },
           ]);
         } else if (presetType === "nca_grab") {
           setFormHops([
-            { hop_order: 1, carrier: "นครชัยแอร์", shipping_type: "special", route_note: "ร้าน → กรุงเทพฯ", tracking_no: "", shop_cost: "", customer_cost: "", shipped_at: today },
-            { hop_order: 2, carrier: "Grab", shipping_type: "special", route_note: "กรุงเทพฯ → ลูกค้า", tracking_no: "", shop_cost: "", customer_cost: "", shipped_at: today },
+            { hop_order: 1, carrier: "นครชัยแอร์", shipping_type: "special", route_note: "ร้าน → กรุงเทพฯ", tracking_no: "", total_cost: "", shop_cost: "", customer_cost: "", shipped_at: today },
+            { hop_order: 2, carrier: "Grab", shipping_type: "special", route_note: "กรุงเทพฯ → ลูกค้า", tracking_no: "", total_cost: "", shop_cost: "", customer_cost: "", shipped_at: today },
           ]);
         } else if (presetType === "inter") {
           setFormHops([
-            { hop_order: 1, carrier: "นครชัยแอร์", shipping_type: "special", route_note: "ร้าน → กรุงเทพฯ", tracking_no: "", shop_cost: "", customer_cost: "", shipped_at: today },
-            { hop_order: 2, carrier: "Lalamove", shipping_type: "special", route_note: "กรุงเทพฯ → บ้านน้องดุล", tracking_no: "", shop_cost: "", customer_cost: "", shipped_at: today },
-            { hop_order: 3, carrier: "DHL", shipping_type: "special", route_note: "ไทย → ต่างประเทศ", tracking_no: "", shop_cost: "", customer_cost: "", shipped_at: today },
+            { hop_order: 1, carrier: "นครชัยแอร์", shipping_type: "special", route_note: "ร้าน → กรุงเทพฯ", tracking_no: "", total_cost: "", shop_cost: "", customer_cost: "", shipped_at: today },
+            { hop_order: 2, carrier: "Lalamove", shipping_type: "special", route_note: "กรุงเทพฯ → บ้านน้องดุล", tracking_no: "", total_cost: "", shop_cost: "", customer_cost: "", shipped_at: today },
+            { hop_order: 3, carrier: "DHL", shipping_type: "special", route_note: "ไทย → ต่างประเทศ", tracking_no: "", total_cost: "", shop_cost: "", customer_cost: "", shipped_at: today },
           ]);
         }
       };
 
       const updateHopField = (idx, field, value) => {
         setFormHops((prev) =>
-          prev.map((h, i) => (i === idx ? { ...h, [field]: value } : h))
+          prev.map((h, i) => {
+            if (i !== idx) return h;
+            if (field === "total_cost") {
+              if (value === "") {
+                return { ...h, total_cost: "", shop_cost: "", customer_cost: "" };
+              }
+              const total = Math.max(0, Number(value) || 0);
+              const existingCust = Math.max(0, Number(h.customer_cost) || 0);
+              if (existingCust > 0 && existingCust <= total) {
+                return { ...h, total_cost: value, shop_cost: String(total - existingCust) };
+              }
+              return { ...h, total_cost: value, shop_cost: String(total), customer_cost: "0" };
+            }
+            if (field === "shop_cost") {
+              const shop = Math.max(0, Number(value) || 0);
+              const total = Math.max(0, Number(h.total_cost) || 0);
+              if (total > 0) {
+                if (shop > total) {
+                  return { ...h, shop_cost: value, total_cost: String(shop), customer_cost: "0" };
+                }
+                return { ...h, shop_cost: value, customer_cost: String(total - shop) };
+              }
+              const cust = Math.max(0, Number(h.customer_cost) || 0);
+              return { ...h, shop_cost: value, total_cost: String(shop + cust) };
+            }
+            if (field === "customer_cost") {
+              const cust = Math.max(0, Number(value) || 0);
+              const total = Math.max(0, Number(h.total_cost) || 0);
+              if (total > 0) {
+                if (cust > total) {
+                  return { ...h, customer_cost: value, total_cost: String(cust), shop_cost: "0" };
+                }
+                return { ...h, customer_cost: value, shop_cost: String(total - cust) };
+              }
+              const shop = Math.max(0, Number(h.shop_cost) || 0);
+              return { ...h, customer_cost: value, total_cost: String(shop + cust) };
+            }
+            return { ...h, [field]: value };
+          })
         );
       };
 
@@ -812,6 +851,7 @@
           .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0))
           .map((h) => ({
             ...h,
+            total_cost: String((Number(h.shop_cost) || 0) + (Number(h.customer_cost) || 0)),
             shop_cost: String(h.shop_cost ?? 0),
             customer_cost: String(h.customer_cost ?? 0),
           }));
@@ -2079,7 +2119,19 @@
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <div>
+                                <label className="block text-[10px] font-bold text-[#ca5151] mb-0.5">ค่าส่งทั้งหมด (บาท)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  value={hop.total_cost ?? ""}
+                                  onChange={(e) => updateHopField(idx, "total_cost", e.target.value)}
+                                  placeholder="0"
+                                  className="w-full bg-[#ffc0b8]/25 border border-[#ca5151]/50 rounded-lg px-2.5 py-1.5 text-xs font-bold text-[#4a3539]"
+                                />
+                              </div>
                               <div>
                                 <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">ร้านออก (บาท)</label>
                                 <input

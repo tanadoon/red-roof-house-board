@@ -117,6 +117,7 @@ export interface ShippingHopDraft {
   shipping_type: ShippingType;
   route_note: string;
   tracking_no: string;
+  total_cost?: number;
   shop_cost: number;
   customer_cost: number;
   shipped_at: string;

@@ -466,6 +466,7 @@ export default function KanbanBoard() {
         shipping_type: shippingType,
         route_note: routeNote,
         tracking_no: "",
+        total_cost: 0,
         shop_cost: 0,
         customer_cost: 0,
         shipped_at: getTodayStr(),
@@ -483,6 +484,7 @@ export default function KanbanBoard() {
           shipping_type: "normal",
           route_note: "ร้าน → ลูกค้า",
           tracking_no: "",
+          total_cost: 0,
           shop_cost: 0,
           customer_cost: 0,
           shipped_at: today,
@@ -496,6 +498,7 @@ export default function KanbanBoard() {
           shipping_type: "special",
           route_note: "ร้าน → กรุงเทพฯ",
           tracking_no: "",
+          total_cost: 0,
           shop_cost: 0,
           customer_cost: 0,
           shipped_at: today,
@@ -506,6 +509,7 @@ export default function KanbanBoard() {
           shipping_type: "special",
           route_note: "กรุงเทพฯ → ลูกค้า",
           tracking_no: "",
+          total_cost: 0,
           shop_cost: 0,
           customer_cost: 0,
           shipped_at: today,
@@ -519,6 +523,7 @@ export default function KanbanBoard() {
           shipping_type: "special",
           route_note: "ร้าน → กรุงเทพฯ",
           tracking_no: "",
+          total_cost: 0,
           shop_cost: 0,
           customer_cost: 0,
           shipped_at: today,
@@ -529,6 +534,7 @@ export default function KanbanBoard() {
           shipping_type: "special",
           route_note: "กรุงเทพฯ → บ้านน้องดุล",
           tracking_no: "",
+          total_cost: 0,
           shop_cost: 0,
           customer_cost: 0,
           shipped_at: today,
@@ -539,6 +545,7 @@ export default function KanbanBoard() {
           shipping_type: "special",
           route_note: "ไทย → ต่างประเทศ",
           tracking_no: "",
+          total_cost: 0,
           shop_cost: 0,
           customer_cost: 0,
           shipped_at: today,
@@ -553,7 +560,54 @@ export default function KanbanBoard() {
     value: string | number
   ) => {
     setFormHops((prev) =>
-      prev.map((h, i) => (i === idx ? { ...h, [field]: value } : h))
+      prev.map((h, i) => {
+        if (i !== idx) return h;
+
+        if (field === "total_cost") {
+          const num = Math.max(0, Number(value) || 0);
+          if (num === 0) {
+            return { ...h, total_cost: 0, shop_cost: 0, customer_cost: 0 };
+          }
+          const curCustomer = Number(h.customer_cost) || 0;
+          if (curCustomer > 0 && curCustomer <= num) {
+            return {
+              ...h,
+              total_cost: num,
+              shop_cost: num - curCustomer,
+              customer_cost: curCustomer,
+            };
+          }
+          return { ...h, total_cost: num, shop_cost: num, customer_cost: 0 };
+        }
+
+        if (field === "shop_cost") {
+          const num = Math.max(0, Number(value) || 0);
+          const curTotal = Number(h.total_cost) || 0;
+          if (curTotal > 0) {
+            if (num <= curTotal) {
+              return { ...h, shop_cost: num, customer_cost: curTotal - num };
+            }
+            return { ...h, total_cost: num, shop_cost: num, customer_cost: 0 };
+          }
+          const curCustomer = Number(h.customer_cost) || 0;
+          return { ...h, shop_cost: num, total_cost: num + curCustomer };
+        }
+
+        if (field === "customer_cost") {
+          const num = Math.max(0, Number(value) || 0);
+          const curTotal = Number(h.total_cost) || 0;
+          if (curTotal > 0) {
+            if (num <= curTotal) {
+              return { ...h, customer_cost: num, shop_cost: curTotal - num };
+            }
+            return { ...h, total_cost: num, customer_cost: num, shop_cost: 0 };
+          }
+          const curShop = Number(h.shop_cost) || 0;
+          return { ...h, customer_cost: num, total_cost: curShop + num };
+        }
+
+        return { ...h, [field]: value };
+      })
     );
   };
 
@@ -603,7 +657,11 @@ export default function KanbanBoard() {
     setFormDeliveryDate(task.delivery_date || "");
     const existingHops = allShippingHops
       .filter((h) => h.task_id === task.id)
-      .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0));
+      .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0))
+      .map((h) => ({
+        ...h,
+        total_cost: (Number(h.shop_cost) || 0) + (Number(h.customer_cost) || 0),
+      }));
     setFormHops(existingHops);
     setIsTaskModalOpen(true);
   };
@@ -2158,7 +2216,27 @@ export default function KanbanBoard() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-[#6b484f] mb-0.5">
+                              ค่าส่งทั้งหมด (บาท)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={hop.total_cost ?? 0}
+                              onChange={(e) =>
+                                updateHopField(
+                                  idx,
+                                  "total_cost",
+                                  Number(e.target.value) || 0
+                                )
+                              }
+                              placeholder="0"
+                              className="w-full bg-[#fffaf6] border border-[#cc8867]/60 rounded-lg px-2.5 py-1.5 text-xs font-bold text-[#4a3539]"
+                            />
+                          </div>
                           <div>
                             <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
                               ร้านออก (บาท)
@@ -2169,7 +2247,11 @@ export default function KanbanBoard() {
                               step="any"
                               value={hop.shop_cost}
                               onChange={(e) =>
-                                updateHopField(idx, "shop_cost", e.target.value)
+                                updateHopField(
+                                  idx,
+                                  "shop_cost",
+                                  Number(e.target.value) || 0
+                                )
                               }
                               placeholder="0"
                               className="w-full bg-[#f9e1d3]/35 border border-[#cc8867]/40 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#4a3539]"
@@ -2188,7 +2270,7 @@ export default function KanbanBoard() {
                                 updateHopField(
                                   idx,
                                   "customer_cost",
-                                  e.target.value
+                                  Number(e.target.value) || 0
                                 )
                               }
                               placeholder="0"
