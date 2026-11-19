@@ -922,7 +922,11 @@
             shop_cost: String(h.shop_cost ?? 0),
             customer_cost: String(h.customer_cost ?? 0),
           }));
-        setFormHops(existingHops);
+        setFormHops(
+          isSpecialShippingLocked(existingHops)
+            ? existingHops.map((h) => ({ ...h, shipping_type: "special" }))
+            : existingHops
+        );
         setIsTaskModalOpen(true);
       };
 

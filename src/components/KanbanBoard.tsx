@@ -756,7 +756,11 @@ export default function KanbanBoard() {
         ...h,
         total_cost: (Number(h.shop_cost) || 0) + (Number(h.customer_cost) || 0),
       }));
-    setFormHops(existingHops);
+    setFormHops(
+      isSpecialShippingLocked(existingHops)
+        ? existingHops.map((h) => ({ ...h, shipping_type: "special" as const }))
+        : existingHops
+    );
     setIsTaskModalOpen(true);
   };
 
