@@ -510,25 +510,39 @@ export default function KanbanBoard() {
     return { shopTotal, customerTotal, total: shopTotal + customerTotal };
   }, [formHops]);
 
+  const isNormalCarrier = (carrier: string) =>
+    carrier === "Flash" || carrier === "KEX";
+
   const addEmptyHop = (
     carrier = "Flash",
     shippingType: ShippingType = "normal",
     routeNote = ""
   ) => {
-    setFormHops((prev) => [
-      ...prev,
-      {
-        hop_order: prev.length + 1,
-        carrier,
-        shipping_type: shippingType,
-        route_note: routeNote,
-        tracking_no: "",
-        total_cost: 0,
-        shop_cost: 0,
-        customer_cost: 0,
-        shipped_at: getTodayStr(),
-      },
-    ]);
+    setFormHops((prev) => {
+      const firstNonNormal =
+        prev.length > 0 && !isNormalCarrier(prev[0].carrier);
+      const resolvedType: ShippingType = firstNonNormal
+        ? "special"
+        : prev.length === 0
+        ? isNormalCarrier(carrier)
+          ? shippingType
+          : "special"
+        : shippingType;
+      return [
+        ...prev,
+        {
+          hop_order: prev.length + 1,
+          carrier,
+          shipping_type: resolvedType,
+          route_note: routeNote,
+          tracking_no: "",
+          total_cost: 0,
+          shop_cost: 0,
+          customer_cost: 0,
+          shipped_at: getTodayStr(),
+        },
+      ];
+    });
   };
 
   const applyShippingPreset = (presetType: "normal" | "nca_grab" | "inter") => {
@@ -616,8 +630,32 @@ export default function KanbanBoard() {
     field: keyof ShippingHopDraft,
     value: string | number
   ) => {
-    setFormHops((prev) =>
-      prev.map((h, i) => {
+    setFormHops((prev) => {
+      if (field === "carrier" && idx === 0) {
+        const nextCarrier = String(value);
+        if (!isNormalCarrier(nextCarrier)) {
+          return prev.map((h, i) =>
+            i === 0
+              ? { ...h, carrier: nextCarrier, shipping_type: "special" }
+              : { ...h, shipping_type: "special" }
+          );
+        }
+        return prev.map((h, i) =>
+          i === 0
+            ? { ...h, carrier: nextCarrier, shipping_type: "normal" }
+            : h
+        );
+      }
+
+      if (
+        field === "shipping_type" &&
+        prev.length > 0 &&
+        !isNormalCarrier(prev[0].carrier)
+      ) {
+        return prev;
+      }
+
+      return prev.map((h, i) => {
         if (i !== idx) return h;
 
         if (field === "total_cost") {
@@ -666,10 +704,17 @@ export default function KanbanBoard() {
         return { ...h, [field]: value };
       })
     );
+    });
   };
 
   const removeHop = (idx: number) => {
-    setFormHops((prev) => prev.filter((_, i) => i !== idx));
+    setFormHops((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      if (next.length > 0 && !isNormalCarrier(next[0].carrier)) {
+        return next.map((h) => ({ ...h, shipping_type: "special" }));
+      }
+      return next;
+    });
   };
 
   // Open Modal for New Task
@@ -2520,10 +2565,20 @@ export default function KanbanBoard() {
 
                           <div>
                             <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
-                              ประเภทการส่ง
+                              ประเภทการส่ง{" "}
+                              {formHops.length > 0 &&
+                                !isNormalCarrier(formHops[0].carrier) && (
+                                  <span className="text-[9px] text-[#ca5151]">
+                                    (ล็อก: พิเศษ)
+                                  </span>
+                                )}
                             </label>
                             <select
                               value={hop.shipping_type}
+                              disabled={
+                                formHops.length > 0 &&
+                                !isNormalCarrier(formHops[0].carrier)
+                              }
                               onChange={(e) =>
                                 updateHopField(
                                   idx,
@@ -2531,7 +2586,7 @@ export default function KanbanBoard() {
                                   e.target.value as ShippingType
                                 )
                               }
-                              className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2 py-1.5 text-xs font-semibold text-[#4a3539]"
+                              className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2 py-1.5 text-xs font-semibold text-[#4a3539] disabled:opacity-65 disabled:cursor-not-allowed disabled:bg-[#f9e1d3]/40"
                             >
                               <option value="normal">ปกติ</option>
                               <option value="special">ด่วน / พิเศษ</option>
