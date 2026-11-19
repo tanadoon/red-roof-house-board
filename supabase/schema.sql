@@ -37,5 +37,6 @@ values
   ('10x15 cm', 10),
   ('20x25 cm', 10),
   ('25x25 cm', 10),
-  ('35x35 cm', 10)
+  ('35x35 cm', 10),
+  ('อื่นๆ', 10)
 on conflict (work_size) do nothing;

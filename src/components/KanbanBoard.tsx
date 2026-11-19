@@ -124,6 +124,7 @@ const SIZE_BADGE_STYLES: Record<WorkSize, string> = {
   "20x25 cm": "bg-[#ffc0b8]/80 text-[#5e3a3a] border-[#f2a79e]",
   "25x25 cm": "bg-[#ffd590]/85 text-[#664920] border-[#e8bc72]",
   "35x35 cm": "bg-[#f9e1d3] text-[#77585e] border-[#e6c3af]",
+  "อื่นๆ": "bg-[#fdf7f2] text-[#77585e] border-[#cc8867]/60",
 };
 
 const THAI_MONTHS = [
@@ -735,7 +736,7 @@ export default function KanbanBoard() {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
             {quotaSummary.map((q) => {
               const isSelected = sizeFilter === q.size;
               return (

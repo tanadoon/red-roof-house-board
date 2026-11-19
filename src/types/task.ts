@@ -17,7 +17,8 @@ export type WorkSize =
   | "10x15 cm"
   | "20x25 cm"
   | "25x25 cm"
-  | "35x35 cm";
+  | "35x35 cm"
+  | "อื่นๆ";
 
 export type PaymentStatus = "unpaid_deposit" | "deposit_paid" | "fully_paid";
 
@@ -30,6 +31,7 @@ export const DEFAULT_WORK_SIZES: WorkSize[] = [
   "20x25 cm",
   "25x25 cm",
   "35x35 cm",
+  "อื่นๆ",
 ];
 
 export type QuotaMap = Record<WorkSize, number>;
