@@ -128,9 +128,9 @@
       {
         id: "delivered",
         title: "ส่งแล้ว",
-        accent: "border-t-[#ca5151]",
-        headerBg: "bg-[#ca5151]/12",
-        badgeBg: "bg-[#ca5151] text-white border border-[#b03e3e]",
+        accent: "border-t-[#2e9e6f]",
+        headerBg: "bg-emerald-50",
+        badgeBg: "bg-[#2e9e6f] text-white border border-[#227d57]",
       },
     ];
 
@@ -1576,12 +1576,14 @@
                                 setDraggedTaskId(task.id);
                                 e.dataTransfer.setData("text/plain", task.id);
                               }}
-                              className={`rounded-2xl bg-white border p-3.5 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing space-y-2.5 ${
+                              className={`rounded-2xl border p-3.5 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing space-y-2.5 ${
                                 isDeliveredButUnpaid
                                   ? "border-2 border-[#cc8867] bg-[#ffd590]/20"
+                                  : task.status === "delivered"
+                                  ? "border-emerald-300 bg-emerald-50/40 hover:border-emerald-400"
                                   : dueState === "overdue"
                                   ? "border-[#ca5151] bg-[#ffc0b8]/20 ring-1 ring-[#ca5151]/20"
-                                  : "border-[#f9e1d3] hover:border-[#cc8867]"
+                                  : "bg-white border-[#f9e1d3] hover:border-[#cc8867]"
                               }`}
                             >
                               {/* Row 1: Badges + Edit Button */}
@@ -1673,7 +1675,7 @@
                                 <div className={`p-2.5 rounded-xl border space-y-1.5 ${
                                   isDeliveredButUnpaid
                                     ? "bg-[#ffd590]/55 border-[#cc8867]"
-                                    : "bg-[#789ea5]/15 border-[#789ea5]/35"
+                                    : "bg-emerald-50 border-emerald-200"
                                 }`}>
                                   {/* Work Balance Status in Delivered Lane */}
                                   <div className="flex items-center justify-between gap-2">
