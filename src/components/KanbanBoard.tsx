@@ -249,6 +249,7 @@ export default function KanbanBoard() {
   const [formTitle, setFormTitle] = useState<string>("");
   const [formCustomerName, setFormCustomerName] = useState<string>("");
   const [formCustomerPhone, setFormCustomerPhone] = useState<string>("");
+  const [formCustomerEmail, setFormCustomerEmail] = useState<string>("");
   const [formShippingAddress, setFormShippingAddress] = useState<string>("");
   const [formDesc, setFormDesc] = useState<string>("");
   const [formStatus, setFormStatus] = useState<TaskStatus>("todo");
@@ -323,6 +324,9 @@ export default function KanbanBoard() {
         const matchPhone = (task.customer_phone || "")
           .toLowerCase()
           .includes(q);
+        const matchEmail = (task.customer_email || "")
+          .toLowerCase()
+          .includes(q);
         const matchAddress = (task.shipping_address || "")
           .toLowerCase()
           .includes(q);
@@ -331,6 +335,7 @@ export default function KanbanBoard() {
           !matchTitle &&
           !matchCustomer &&
           !matchPhone &&
+          !matchEmail &&
           !matchAddress &&
           !matchDesc
         )
@@ -409,6 +414,7 @@ export default function KanbanBoard() {
     setFormTitle("");
     setFormCustomerName("");
     setFormCustomerPhone("");
+    setFormCustomerEmail("");
     setFormShippingAddress("");
     setFormDesc("");
     setFormStatus(defaultStatus);
@@ -429,6 +435,7 @@ export default function KanbanBoard() {
     setFormTitle(task.title);
     setFormCustomerName(task.customer_name || "");
     setFormCustomerPhone(task.customer_phone || "");
+    setFormCustomerEmail(task.customer_email || "");
     setFormShippingAddress(task.shipping_address || "");
     setFormDesc(task.description || "");
     setFormStatus(task.status || "todo");
@@ -469,6 +476,7 @@ export default function KanbanBoard() {
           title: formTitle.trim(),
           customer_name: formCustomerName.trim(),
           customer_phone: formCustomerPhone.trim(),
+          customer_email: formCustomerEmail.trim(),
           shipping_address: formShippingAddress.trim(),
           description: formDesc.trim(),
           status: formStatus,
@@ -486,6 +494,7 @@ export default function KanbanBoard() {
           title: formTitle.trim(),
           customer_name: formCustomerName.trim(),
           customer_phone: formCustomerPhone.trim(),
+          customer_email: formCustomerEmail.trim(),
           shipping_address: formShippingAddress.trim(),
           description: formDesc.trim(),
           status: formStatus,
@@ -1249,6 +1258,15 @@ export default function KanbanBoard() {
                                   โทร: {task.customer_phone}
                                 </a>
                               )}
+                              {task.customer_email && (
+                                <a
+                                  href={`mailto:${task.customer_email}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[11px] font-medium text-[#5b3b8c] bg-[#f3e8ff] border border-[#d8b4fe] px-2 py-0.5 rounded-md hover:bg-[#e9d5ff] transition truncate max-w-full"
+                                >
+                                  {task.customer_email}
+                                </a>
+                              )}
                             </div>
 
                             {task.shipping_address && (
@@ -1495,6 +1513,19 @@ export default function KanbanBoard() {
                     className="w-full bg-[#ffc0b8]/20 border-2 border-[#ca5151]/50 rounded-xl px-3.5 py-2 text-sm font-semibold text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#77585e] mb-1">
+                  อีเมลลูกค้า (Email)
+                </label>
+                <input
+                  type="email"
+                  value={formCustomerEmail}
+                  onChange={(e) => setFormCustomerEmail(e.target.value)}
+                  placeholder="เช่น customer@email.com (ถ้ามี)"
+                  className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
+                />
               </div>
 
               <div>

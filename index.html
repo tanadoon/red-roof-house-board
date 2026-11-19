@@ -456,6 +456,7 @@
       const [formTitle, setFormTitle] = useState("");
       const [formCustomerName, setFormCustomerName] = useState("");
       const [formCustomerPhone, setFormCustomerPhone] = useState("");
+      const [formCustomerEmail, setFormCustomerEmail] = useState("");
       const [formShippingAddress, setFormShippingAddress] = useState("");
       const [formDesc, setFormDesc] = useState("");
       const [formStatus, setFormStatus] = useState("todo");
@@ -578,9 +579,10 @@
             const matchTitle = (task.title || "").toLowerCase().includes(q);
             const matchCustomer = (task.customer_name || "").toLowerCase().includes(q);
             const matchPhone = (task.customer_phone || "").toLowerCase().includes(q);
+            const matchEmail = (task.customer_email || "").toLowerCase().includes(q);
             const matchAddress = (task.shipping_address || "").toLowerCase().includes(q);
             const matchDesc = (task.description || "").toLowerCase().includes(q);
-            if (!matchTitle && !matchCustomer && !matchPhone && !matchAddress && !matchDesc) return false;
+            if (!matchTitle && !matchCustomer && !matchPhone && !matchEmail && !matchAddress && !matchDesc) return false;
           }
           if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
           if (sizeFilter !== "all" && (task.work_size || "A4") !== sizeFilter) return false;
@@ -647,6 +649,7 @@
         setFormTitle("");
         setFormCustomerName("");
         setFormCustomerPhone("");
+        setFormCustomerEmail("");
         setFormShippingAddress("");
         setFormDesc("");
         setFormStatus(defaultStatus);
@@ -666,6 +669,7 @@
         setFormTitle(task.title || "");
         setFormCustomerName(task.customer_name || "");
         setFormCustomerPhone(task.customer_phone || "");
+        setFormCustomerEmail(task.customer_email || "");
         setFormShippingAddress(task.shipping_address || "");
         setFormDesc(task.description || "");
         setFormStatus(task.status || "todo");
@@ -698,6 +702,7 @@
             title: formTitle.trim(),
             customer_name: formCustomerName.trim(),
             customer_phone: formCustomerPhone.trim(),
+            customer_email: formCustomerEmail.trim(),
             shipping_address: formShippingAddress.trim(),
             description: formDesc.trim(),
             status: formStatus,
@@ -722,6 +727,7 @@
             title: formTitle.trim(),
             customer_name: formCustomerName.trim(),
             customer_phone: formCustomerPhone.trim(),
+            customer_email: formCustomerEmail.trim(),
             shipping_address: formShippingAddress.trim(),
             description: formDesc.trim(),
             status: formStatus,
@@ -1301,6 +1307,15 @@
                                       โทร: {task.customer_phone}
                                     </a>
                                   )}
+                                  {task.customer_email && (
+                                    <a
+                                      href={`mailto:${task.customer_email}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-[11px] font-medium text-[#5b3b8c] bg-[#f3e8ff] border border-[#d8b4fe] px-2 py-0.5 rounded-md hover:bg-[#e9d5ff] transition truncate max-w-full"
+                                    >
+                                      {task.customer_email}
+                                    </a>
+                                  )}
                                 </div>
 
                                 {task.shipping_address && (
@@ -1515,6 +1530,19 @@
                         className="w-full bg-[#ffc0b8]/20 border-2 border-[#ca5151]/50 rounded-xl px-3.5 py-2 text-sm font-semibold text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#77585e] mb-1">
+                      อีเมลลูกค้า (Email)
+                    </label>
+                    <input
+                      type="email"
+                      value={formCustomerEmail}
+                      onChange={(e) => setFormCustomerEmail(e.target.value)}
+                      placeholder="เช่น customer@email.com (ถ้ามี)"
+                      className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
+                    />
                   </div>
 
                   <div>

@@ -5,6 +5,7 @@ create table if not exists public.tasks (
   title text not null,
   customer_name text not null default '',
   customer_phone text not null default '',
+  customer_email text not null default '',
   shipping_address text not null default '',
   description text default '',
   status text not null check (status in ('todo', 'draft', 'cutting', 'framing', 'backdrop', 'ready_to_ship', 'delivered')) default 'todo',

@@ -39,6 +39,7 @@ export interface Task {
   title: string;
   customer_name: string;
   customer_phone: string; // เบอร์โทรศัพท์ลูกค้า (บังคับใส่)
+  customer_email: string; // อีเมลลูกค้า (ไม่บังคับ)
   shipping_address: string; // ที่อยู่จัดส่งของลูกค้า
   description: string;
   status: TaskStatus;
@@ -59,6 +60,7 @@ export interface CreateTaskInput {
   title: string;
   customer_name: string;
   customer_phone: string;
+  customer_email: string;
   shipping_address: string;
   description: string;
   status: TaskStatus;
