@@ -7,12 +7,15 @@ import {
   ShippingHopDraft,
   SupabaseConfig,
   Task,
+  TaskStatus,
+  TaskStatusHistory,
   WorkSize,
 } from "@/types/task";
 
 const LOCAL_TASKS_KEY = "red_roof_house_tasks_v4";
 const LOCAL_QUOTAS_KEY = "red_roof_house_quotas_v2";
 const LOCAL_HOPS_KEY = "red_roof_house_shipping_hops_v1";
+const LOCAL_STATUS_HISTORY_KEY = "red_roof_house_status_history_v1";
 const LOCAL_SUPABASE_CONFIG_KEY = "kanban_supabase_config_v1";
 
 const DEFAULT_SUPABASE_URL = "https://wlhxsjvopbpxwhxyocvi.supabase.co";
@@ -631,4 +634,80 @@ export async function replaceTaskShippingHops(
   }));
   saveLocalShippingHops([...others, ...created]);
   return created;
+}
+
+export function loadLocalStatusHistory(): TaskStatusHistory[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STATUS_HISTORY_KEY);
+    return raw ? (JSON.parse(raw) as TaskStatusHistory[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalStatusHistory(history: TaskStatusHistory[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LOCAL_STATUS_HISTORY_KEY, JSON.stringify(history));
+}
+
+export async function fetchAllStatusHistory(): Promise<TaskStatusHistory[]> {
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from("task_status_history")
+        .select("*")
+        .order("entered_at", { ascending: true });
+      if (!error && data) {
+        return data as TaskStatusHistory[];
+      }
+    } catch {
+      // Fallback to localStorage if table doesn't exist yet
+    }
+  }
+  return loadLocalStatusHistory();
+}
+
+export async function recordTaskStatusTransition(
+  taskId: string,
+  newStatus: TaskStatus
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+
+  // Always update local history cache
+  const local = loadLocalStatusHistory().map((h) =>
+    h.task_id === taskId && !h.exited_at ? { ...h, exited_at: nowIso } : h
+  );
+  local.push({
+    id: `hist-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    task_id: taskId,
+    status: newStatus,
+    entered_at: nowIso,
+    exited_at: null,
+    created_at: nowIso,
+  });
+  saveLocalStatusHistory(local);
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client
+        .from("task_status_history")
+        .update({ exited_at: nowIso })
+        .eq("task_id", taskId)
+        .is("exited_at", null);
+
+      await client.from("task_status_history").insert([
+        {
+          task_id: taskId,
+          status: newStatus,
+          entered_at: nowIso,
+          exited_at: null,
+        },
+      ]);
+    } catch {
+      // Ignore if table not yet migrated
+    }
+  }
 }

@@ -124,3 +124,12 @@ export interface ShippingHopDraft {
   customer_cost: number;
   shipped_at: string;
 }
+
+export interface TaskStatusHistory {
+  id: string;
+  task_id: string;
+  status: TaskStatus;
+  entered_at: string;
+  exited_at: string | null;
+  created_at?: string;
+}

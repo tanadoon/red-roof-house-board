@@ -26,16 +26,19 @@ import {
   Task,
   TaskPriority,
   TaskStatus,
+  TaskStatusHistory,
   WorkSize,
 } from "@/types/task";
 import {
   createTask,
   deleteTask,
   fetchAllShippingHops,
+  fetchAllStatusHistory,
   fetchQuotas,
   fetchTasksByMonth,
   getDefaultQuotas,
   loadQuotas,
+  recordTaskStatusTransition,
   replaceTaskShippingHops,
   subscribeToRealtimeChanges,
   updateQuota,
@@ -211,6 +214,49 @@ function formatTHB(amount: number): string {
   return Number(amount || 0).toLocaleString("th-TH");
 }
 
+function getDurationMs(
+  startIso?: string | null,
+  endIso: string | null = null,
+  nowMs = Date.now()
+): number {
+  if (!startIso) return 0;
+  const start = new Date(startIso).getTime();
+  const end = endIso ? new Date(endIso).getTime() : nowMs;
+  if (Number.isNaN(start) || Number.isNaN(end)) return 0;
+  return Math.max(0, end - start);
+}
+
+function formatDuration(
+  startIso?: string | null,
+  endIso: string | null = null,
+  nowMs = Date.now()
+): string {
+  const diffMs = getDurationMs(startIso, endIso, nowMs);
+  const totalMins = Math.floor(diffMs / 60000);
+  if (totalMins < 1) return "< 1 นาที";
+  if (totalMins < 60) return `${totalMins} นาที`;
+  const totalHours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (totalHours < 24) {
+    return mins > 0 ? `${totalHours} ชม. ${mins} น.` : `${totalHours} ชม.`;
+  }
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return hours > 0 ? `${days} วัน ${hours} ชม.` : `${days} วัน`;
+}
+
+function formatDateTimeTH(isoStr?: string | null): string {
+  if (!isoStr) return "-";
+  const d = new Date(isoStr);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("th-TH", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getRemainingBalance(task: {
   agreed_price?: number;
   payment_status?: PaymentStatus;
@@ -228,6 +274,10 @@ export default function KanbanBoard() {
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthStr);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [allShippingHops, setAllShippingHops] = useState<ShippingHop[]>([]);
+  const [allStatusHistory, setAllStatusHistory] = useState<TaskStatusHistory[]>(
+    []
+  );
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
   const [quotas, setQuotas] = useState<QuotaMap>(getDefaultQuotas);
   const [isEditingQuotas, setIsEditingQuotas] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -298,6 +348,9 @@ export default function KanbanBoard() {
     setQuotas(loadQuotas());
     fetchQuotas().then(setQuotas).catch(() => {});
     fetchAllShippingHops().then(setAllShippingHops).catch(() => {});
+    fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+    const timer = setInterval(() => setNowTick(Date.now()), 60000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -314,6 +367,9 @@ export default function KanbanBoard() {
         .catch(() => {});
       fetchAllShippingHops()
         .then(setAllShippingHops)
+        .catch(() => {});
+      fetchAllStatusHistory()
+        .then(setAllStatusHistory)
         .catch(() => {});
     });
 
@@ -805,6 +861,9 @@ export default function KanbanBoard() {
           due_date: formDueDate || null,
           delivery_date: formDeliveryDate || null,
         });
+        if (editingTask.status !== formStatus) {
+          await recordTaskStatusTransition(editingTask.id, formStatus);
+        }
       } else {
         const payload: CreateTaskInput = {
           title: formTitle.trim(),
@@ -826,6 +885,7 @@ export default function KanbanBoard() {
         };
         const created = await createTask(payload);
         savedTaskId = created.id;
+        await recordTaskStatusTransition(created.id, formStatus);
       }
 
       if (savedTaskId) {
@@ -835,6 +895,7 @@ export default function KanbanBoard() {
       setIsTaskModalOpen(false);
       await loadBoard(selectedMonth);
       fetchAllShippingHops().then(setAllShippingHops).catch(() => {});
+      fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "ไม่สามารถบันทึกงานได้");
     }
@@ -895,6 +956,10 @@ export default function KanbanBoard() {
         month: updatedMonth,
         ...extraPayment,
       });
+      if (target.status !== newStatus) {
+        await recordTaskStatusTransition(taskId, newStatus);
+        fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+      }
     } catch (err: unknown) {
       await loadBoard(selectedMonth);
       alert(err instanceof Error ? err.message : "อัปเดตสถานะไม่สำเร็จ");
@@ -1931,7 +1996,72 @@ export default function KanbanBoard() {
                             </div>
                           )}
 
-                          {/* Row 5: Footer (Short Delivery Date + Status Dropdown) */}
+                          {/* Row 5: Lane Duration Pill + Footer (Short Delivery Date + Status Dropdown) */}
+                          {(() => {
+                            const taskHistory = allStatusHistory
+                              .filter((h) => h.task_id === task.id)
+                              .sort(
+                                (a, b) =>
+                                  new Date(a.entered_at).getTime() -
+                                  new Date(b.entered_at).getTime()
+                              );
+                            const activeHist =
+                              [...taskHistory]
+                                .reverse()
+                                .find((h) => !h.exited_at) ||
+                              taskHistory[taskHistory.length - 1];
+                            const enteredAt =
+                              activeHist?.entered_at ||
+                              task.updated_at ||
+                              task.created_at;
+                            const durMs = getDurationMs(
+                              enteredAt,
+                              null,
+                              nowTick
+                            );
+                            const isStaleInLane =
+                              task.status !== "delivered" &&
+                              durMs >= 3 * 24 * 60 * 60 * 1000;
+                            const durText = formatDuration(
+                              enteredAt,
+                              null,
+                              nowTick
+                            );
+                            return (
+                              <div className="flex items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(task)}
+                                  title="คลิกเพื่อดูประวัติเวลาทุกเลน"
+                                  className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md border transition ${
+                                    task.status === "delivered"
+                                      ? "bg-[#6b9078]/12 text-[#4c6b57] border-[#6b9078]/35"
+                                      : isStaleInLane
+                                      ? "bg-[#ffd590]/60 text-[#ca5151] border-[#cc8867]"
+                                      : "bg-[#fdf7f2] text-[#77585e]/85 border-[#f9e1d3] hover:border-[#cc8867]"
+                                  }`}
+                                >
+                                  <span>⏱</span>
+                                  <span>
+                                    {task.status === "delivered"
+                                      ? `ส่งแล้ว ${durText}`
+                                      : isStaleInLane
+                                      ? `ค้างเลนนี้ ${durText}`
+                                      : `ในเลนนี้ ${durText}`}
+                                  </span>
+                                </button>
+                                {taskHistory.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditModal(task)}
+                                    className="text-[10px] text-[#789ea5] hover:text-[#4a6b72] font-semibold underline"
+                                  >
+                                    ดูประวัติ ({taskHistory.length})
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <div className="pt-2 border-t border-[#f9e1d3] flex items-center justify-between gap-2">
                             <span
                               className={`text-[11px] shrink-0 ${
@@ -2731,6 +2861,93 @@ export default function KanbanBoard() {
                   </div>
                 )}
               </div>
+
+              {/* Lane Duration History Timeline (when editing existing task) */}
+              {editingTask &&
+                (() => {
+                  const taskTimeline = allStatusHistory
+                    .filter((h) => h.task_id === editingTask.id)
+                    .sort(
+                      (a, b) =>
+                        new Date(a.entered_at).getTime() -
+                        new Date(b.entered_at).getTime()
+                    );
+                  const totalFirstEntered =
+                    taskTimeline.length > 0
+                      ? taskTimeline[0].entered_at
+                      : editingTask.created_at;
+                  return (
+                    <div className="p-3.5 rounded-2xl bg-[#789ea5]/10 border border-[#789ea5]/35 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-[#4a6b72]">
+                          ⏱ ประวัติระยะเวลาแต่ละเลน (Timeline)
+                        </span>
+                        <span className="text-[11px] font-semibold text-[#77585e]">
+                          รวมตั้งแต่เปิดงาน:{" "}
+                          {formatDuration(totalFirstEntered, null, nowTick)}
+                        </span>
+                      </div>
+                      {taskTimeline.length === 0 ? (
+                        <p className="text-[11px] text-[#77585e]/75">
+                          กำลังเริ่มจับเวลาเลนปัจจุบัน (
+                          {COLUMNS.find((c) => c.id === editingTask.status)
+                            ?.title || editingTask.status}
+                          ) —{" "}
+                          {formatDuration(
+                            editingTask.updated_at || editingTask.created_at,
+                            null,
+                            nowTick
+                          )}
+                        </p>
+                      ) : (
+                        <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                          {taskTimeline.map((item) => {
+                            const colTitle =
+                              COLUMNS.find((c) => c.id === item.status)
+                                ?.title || item.status;
+                            const isCurrent = !item.exited_at;
+                            return (
+                              <div
+                                key={item.id}
+                                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border text-[11px] ${
+                                  isCurrent
+                                    ? "bg-white border-[#6b9078]/50 font-semibold"
+                                    : "bg-white/70 border-[#f9e1d3]"
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <span className="font-bold text-[#77585e]">
+                                    {colTitle}
+                                  </span>
+                                  <span className="text-[10px] text-[#77585e]/75 ml-1.5">
+                                    ({formatDateTimeTH(item.entered_at)} →{" "}
+                                    {item.exited_at
+                                      ? formatDateTimeTH(item.exited_at)
+                                      : "ปัจจุบัน"}
+                                    )
+                                  </span>
+                                </div>
+                                <span
+                                  className={`shrink-0 font-bold ${
+                                    isCurrent
+                                      ? "text-[#6b9078]"
+                                      : "text-[#77585e]"
+                                  }`}
+                                >
+                                  {formatDuration(
+                                    item.entered_at,
+                                    item.exited_at,
+                                    nowTick
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
               <div className="flex items-center justify-between pt-3 border-t border-[#f9e1d3]">
                 {editingTask ? (
