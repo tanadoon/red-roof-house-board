@@ -512,6 +512,8 @@ export default function KanbanBoard() {
 
   const isNormalCarrier = (carrier: string) =>
     carrier === "Flash" || carrier === "KEX";
+  const isSpecialShippingLocked = (hops: ShippingHopDraft[]) =>
+    hops.length > 1 || (hops.length === 1 && !isNormalCarrier(hops[0].carrier));
 
   const addEmptyHop = (
     carrier = "Flash",
@@ -519,21 +521,12 @@ export default function KanbanBoard() {
     routeNote = ""
   ) => {
     setFormHops((prev) => {
-      const firstNonNormal =
-        prev.length > 0 && !isNormalCarrier(prev[0].carrier);
-      const resolvedType: ShippingType = firstNonNormal
-        ? "special"
-        : prev.length === 0
-        ? isNormalCarrier(carrier)
-          ? shippingType
-          : "special"
-        : shippingType;
-      return [
+      const next: ShippingHopDraft[] = [
         ...prev,
         {
           hop_order: prev.length + 1,
           carrier,
-          shipping_type: resolvedType,
+          shipping_type: shippingType,
           route_note: routeNote,
           tracking_no: "",
           total_cost: 0,
@@ -542,6 +535,10 @@ export default function KanbanBoard() {
           shipped_at: getTodayStr(),
         },
       ];
+      if (isSpecialShippingLocked(next)) {
+        return next.map((h) => ({ ...h, shipping_type: "special" as const }));
+      }
+      return next;
     });
   };
 
@@ -633,25 +630,16 @@ export default function KanbanBoard() {
     setFormHops((prev) => {
       if (field === "carrier" && idx === 0) {
         const nextCarrier = String(value);
-        if (!isNormalCarrier(nextCarrier)) {
-          return prev.map((h, i) =>
-            i === 0
-              ? { ...h, carrier: nextCarrier, shipping_type: "special" }
-              : { ...h, shipping_type: "special" }
-          );
-        }
-        return prev.map((h, i) =>
-          i === 0
-            ? { ...h, carrier: nextCarrier, shipping_type: "normal" }
-            : h
+        const next = prev.map((h, i) =>
+          i === 0 ? { ...h, carrier: nextCarrier } : h
         );
+        if (isSpecialShippingLocked(next)) {
+          return next.map((h) => ({ ...h, shipping_type: "special" as const }));
+        }
+        return next.map((h) => ({ ...h, shipping_type: "normal" as const }));
       }
 
-      if (
-        field === "shipping_type" &&
-        prev.length > 0 &&
-        !isNormalCarrier(prev[0].carrier)
-      ) {
+      if (field === "shipping_type" && isSpecialShippingLocked(prev)) {
         return prev;
       }
 
@@ -710,8 +698,11 @@ export default function KanbanBoard() {
   const removeHop = (idx: number) => {
     setFormHops((prev) => {
       const next = prev.filter((_, i) => i !== idx);
-      if (next.length > 0 && !isNormalCarrier(next[0].carrier)) {
-        return next.map((h) => ({ ...h, shipping_type: "special" }));
+      if (isSpecialShippingLocked(next)) {
+        return next.map((h) => ({ ...h, shipping_type: "special" as const }));
+      }
+      if (next.length === 1 && isNormalCarrier(next[0].carrier)) {
+        return next.map((h) => ({ ...h, shipping_type: "normal" as const }));
       }
       return next;
     });
@@ -2566,19 +2557,15 @@ export default function KanbanBoard() {
                           <div>
                             <label className="block text-[10px] font-semibold text-[#77585e] mb-0.5">
                               ประเภทการส่ง{" "}
-                              {formHops.length > 0 &&
-                                !isNormalCarrier(formHops[0].carrier) && (
-                                  <span className="text-[9px] text-[#ca5151]">
-                                    (ล็อก: พิเศษ)
-                                  </span>
-                                )}
+                              {isSpecialShippingLocked(formHops) && (
+                                <span className="text-[9px] text-[#ca5151]">
+                                  (ล็อก: พิเศษ)
+                                </span>
+                              )}
                             </label>
                             <select
                               value={hop.shipping_type}
-                              disabled={
-                                formHops.length > 0 &&
-                                !isNormalCarrier(formHops[0].carrier)
-                              }
+                              disabled={isSpecialShippingLocked(formHops)}
                               onChange={(e) =>
                                 updateHopField(
                                   idx,
