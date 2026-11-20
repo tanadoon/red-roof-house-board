@@ -27,6 +27,7 @@ import {
   TaskPriority,
   TaskStatus,
   TaskStatusHistory,
+  UserRole,
   WorkSize,
 } from "@/types/task";
 import {
@@ -34,13 +35,19 @@ import {
   deleteTask,
   fetchAllShippingHops,
   fetchAllStatusHistory,
+  fetchCurrentUserRole,
   fetchQuotas,
   fetchTasksByMonth,
   getDefaultQuotas,
+  getSupabaseClient,
   loadQuotas,
   recordTaskStatusTransition,
   reopenDeliveredTimer,
   replaceTaskShippingHops,
+  signInWithEmailPassword,
+  signInWithGoogleOAuth,
+  signOutUser,
+  signUpWithEmailPassword,
   stopDeliveredTimer,
   subscribeToRealtimeChanges,
   updateQuota,
@@ -273,6 +280,20 @@ function getRemainingBalance(task: {
 }
 
 export default function KanbanBoard() {
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [authUser, setAuthUser] = useState<{ id: string; email?: string } | null>(
+    null
+  );
+  const [authRole, setAuthRole] = useState<UserRole>("viewer");
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authEmail, setAuthEmail] = useState<string>("");
+  const [authPassword, setAuthPassword] = useState<string>("");
+  const [authError, setAuthError] = useState<string>("");
+  const [authNotice, setAuthNotice] = useState<string>("");
+  const [authBusy, setAuthBusy] = useState<boolean>(false);
+
+  const isOwner = authRole === "owner";
+
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthStr);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [allShippingHops, setAllShippingHops] = useState<ShippingHop[]>([]);
@@ -328,11 +349,14 @@ export default function KanbanBoard() {
   const [formDeliveryDate, setFormDeliveryDate] = useState<string>("");
   const [formHops, setFormHops] = useState<ShippingHopDraft[]>([]);
 
-  const loadBoard = async (monthToLoad = selectedMonth) => {
+  const loadBoard = async (
+    monthToLoad = selectedMonth,
+    roleOverride: UserRole = authRole
+  ) => {
     setLoading(true);
     setBannerError(null);
     try {
-      const result = await fetchTasksByMonth(monthToLoad);
+      const result = await fetchTasksByMonth(monthToLoad, roleOverride);
       setTasks(result.tasks);
       if (result.error) {
         setBannerError(result.error);
@@ -346,20 +370,113 @@ export default function KanbanBoard() {
     }
   };
 
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthNotice("");
+    setAuthBusy(true);
+    try {
+      if (authMode === "login") {
+        await signInWithEmailPassword(authEmail, authPassword);
+      } else {
+        const res = await signUpWithEmailPassword(authEmail, authPassword);
+        if (!res.session) {
+          setAuthNotice(
+            "สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี จากนั้นเข้าสู่ระบบ (สิทธิ์เริ่มต้น: Viewer)"
+          );
+        }
+      }
+    } catch (err: unknown) {
+      setAuthError(
+        err instanceof Error ? err.message : "ไม่สามารถดำเนินการได้"
+      );
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setAuthError("");
+    setAuthNotice("");
+    setAuthBusy(true);
+    try {
+      await signInWithGoogleOAuth();
+    } catch (err: unknown) {
+      setAuthError(
+        err instanceof Error
+          ? err.message
+          : "ไม่สามารถเข้าสู่ระบบด้วย Google ได้"
+      );
+      setAuthBusy(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setAuthUser(null);
+    setAuthRole("viewer");
+    setTasks([]);
+    setAllShippingHops([]);
+    setAllStatusHistory([]);
+  };
+
   useEffect(() => {
-    setQuotas(loadQuotas());
-    fetchQuotas().then(setQuotas).catch(() => {});
-    fetchAllShippingHops().then(setAllShippingHops).catch(() => {});
-    fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+    const client = getSupabaseClient();
+    if (!client) {
+      setAuthLoading(false);
+      return;
+    }
+    let mounted = true;
+    const syncSession = async (
+      session: { user?: { id: string; email?: string } } | null
+    ) => {
+      if (!mounted) return;
+      const user = session?.user ?? null;
+      setAuthUser(user);
+      if (user) {
+        const role = await fetchCurrentUserRole(user.id);
+        if (!mounted) return;
+        setAuthRole(role);
+        if (role !== "owner") {
+          setSelectedMonth(getCurrentMonthStr());
+        }
+      } else {
+        setAuthRole("viewer");
+      }
+      setAuthLoading(false);
+    };
+
+    client.auth.getSession().then(({ data }) => syncSession(data.session));
+    const { data: authSub } = client.auth.onAuthStateChange(
+      (_event, session) => {
+        syncSession(session);
+      }
+    );
+
     const timer = setInterval(() => setNowTick(Date.now()), 60000);
-    return () => clearInterval(timer);
+    return () => {
+      mounted = false;
+      authSub?.subscription?.unsubscribe();
+      clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
-    loadBoard(selectedMonth);
+    if (!authUser) return;
+    const effectiveMonth = isOwner ? selectedMonth : getCurrentMonthStr();
+    if (!isOwner && selectedMonth !== effectiveMonth) {
+      setSelectedMonth(effectiveMonth);
+      return;
+    }
+
+    setQuotas(loadQuotas());
+    fetchQuotas().then(setQuotas).catch(() => {});
+    fetchAllShippingHops(authRole).then(setAllShippingHops).catch(() => {});
+    fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+    loadBoard(effectiveMonth, authRole);
 
     const unsubscribe = subscribeToRealtimeChanges(() => {
-      fetchTasksByMonth(selectedMonth)
+      fetchTasksByMonth(effectiveMonth, authRole)
         .then((res) => {
           setTasks(res.tasks);
         })
@@ -367,7 +484,7 @@ export default function KanbanBoard() {
       fetchQuotas()
         .then(setQuotas)
         .catch(() => {});
-      fetchAllShippingHops()
+      fetchAllShippingHops(authRole)
         .then(setAllShippingHops)
         .catch(() => {});
       fetchAllStatusHistory()
@@ -378,9 +495,10 @@ export default function KanbanBoard() {
     return () => {
       unsubscribe();
     };
-  }, [selectedMonth]);
+  }, [authUser, authRole, selectedMonth]);
 
   const handleQuotaChange = (size: WorkSize, newLimit: number) => {
+    if (!isOwner) return;
     const safeLimit = Math.max(0, Math.min(999, Number(newLimit) || 0));
     const updated = { ...quotas, [size]: safeLimit };
     setQuotas(updated);
@@ -767,6 +885,7 @@ export default function KanbanBoard() {
 
   // Open Modal for New Task
   const openCreateModal = (defaultStatus: TaskStatus = "todo") => {
+    if (!isOwner) return;
     setEditingTask(null);
     setFormTitle("");
     setFormCustomerName("");
@@ -790,6 +909,7 @@ export default function KanbanBoard() {
 
   // Open Modal for Editing Task
   const openEditModal = (task: Task) => {
+    if (!isOwner) return;
     setEditingTask(task);
     setFormTitle(task.title);
     setFormCustomerName(task.customer_name || "");
@@ -1008,6 +1128,7 @@ export default function KanbanBoard() {
   };
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    if (!isOwner) return;
     const target = tasks.find((t) => t.id === taskId);
     if (!target || target.status === newStatus) return;
 
@@ -1119,6 +1240,164 @@ export default function KanbanBoard() {
     return COLUMNS.filter((c) => c.id === mobileStageTab);
   }, [mobileStageTab]);
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white/95 border-2 border-[#f9e1d3] rounded-3xl p-8 shadow-xl text-center space-y-3 max-w-sm w-full">
+          <img
+            src="/logo-v2.jpg?v=2"
+            alt="Redroof House"
+            className="h-16 w-auto mx-auto rounded-xl"
+          />
+          <p className="text-sm font-bold text-[#77585e]">
+            กำลังตรวจสอบสิทธิ์การเข้าใช้งาน...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white/95 border-2 border-[#f9e1d3] rounded-3xl p-6 sm:p-8 shadow-2xl max-w-md w-full space-y-5">
+          <div className="text-center space-y-2">
+            <img
+              src="/logo-v2.jpg?v=2"
+              alt="Redroof House Logo"
+              className="h-16 w-auto mx-auto rounded-2xl object-contain bg-white border border-[#f9e1d3] px-3 py-1.5 shadow-sm"
+            />
+            <h1 className="text-lg font-bold text-[#77585e]">
+              Red Roof House Board
+            </h1>
+            <p className="text-xs text-[#789ea5] font-medium">
+              เข้าสู่ระบบเพื่อดูหรือจัดการคิวงาน (บัญชีใหม่จะได้รับสิทธิ์ Viewer)
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={authBusy}
+            onClick={handleGoogleLogin}
+            className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-[#fdf7f2] border-2 border-[#f9e1d3] hover:border-[#cc8867] text-xs sm:text-sm font-bold text-[#77585e] flex items-center justify-center gap-2.5 shadow-sm transition disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <path
+                fill="#EA4335"
+                d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.2 8.9 5 12 5z"
+              />
+              <path
+                fill="#4285F4"
+                d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.7z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.3 14.7c-.2-.8-.4-1.7-.4-2.7s.2-1.9.4-2.7L1.6 6.4C.6 8.3 0 10.1 0 12s.6 3.7 1.6 5.6l3.7-2.9z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.1-6.7-5l-3.7 2.9C3.5 20.4 7.4 23 12 23z"
+              />
+            </svg>
+            <span>เข้าสู่ระบบด้วย Google</span>
+          </button>
+
+          <div className="flex items-center gap-3 text-[11px] text-[#77585e]/60">
+            <div className="h-px bg-[#f9e1d3] flex-1" />
+            <span>หรือใช้อีเมล</span>
+            <div className="h-px bg-[#f9e1d3] flex-1" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[#f9e1d3]/50">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("login");
+                setAuthError("");
+                setAuthNotice("");
+              }}
+              className={`py-1.5 rounded-lg text-xs font-bold transition ${
+                authMode === "login"
+                  ? "bg-white text-[#ca5151] shadow-sm"
+                  : "text-[#77585e]/75"
+              }`}
+            >
+              เข้าสู่ระบบ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthMode("signup");
+                setAuthError("");
+                setAuthNotice("");
+              }}
+              className={`py-1.5 rounded-lg text-xs font-bold transition ${
+                authMode === "signup"
+                  ? "bg-white text-[#ca5151] shadow-sm"
+                  : "text-[#77585e]/75"
+              }`}
+            >
+              สมัครสมาชิก (Viewer)
+            </button>
+          </div>
+
+          <form onSubmit={handleEmailAuth} className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-[#77585e] mb-1">
+                อีเมล
+              </label>
+              <input
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-[#77585e] mb-1">
+                รหัสผ่าน
+              </label>
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="อย่างน้อย 6 ตัวอักษร"
+                className="w-full bg-[#fdf7f2] border border-[#f9e1d3] rounded-xl px-3.5 py-2 text-sm text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
+              />
+            </div>
+
+            {authError && (
+              <p className="text-xs font-semibold text-[#ca5151] bg-[#ffc0b8]/35 border border-[#ca5151]/40 rounded-xl px-3 py-2">
+                {authError}
+              </p>
+            )}
+            {authNotice && (
+              <p className="text-xs font-semibold text-[#4c6b57] bg-[#6b9078]/15 border border-[#6b9078]/40 rounded-xl px-3 py-2">
+                {authNotice}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={authBusy}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#ca5151] hover:bg-[#b54242] text-white text-sm font-bold shadow-md shadow-[#ca5151]/25 transition disabled:opacity-50"
+            >
+              {authBusy
+                ? "กำลังดำเนินการ..."
+                : authMode === "login"
+                ? "เข้าสู่ระบบ"
+                : "สมัครสมาชิก (รับสิทธิ์ Viewer)"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen text-[#4a3539] flex flex-col">
       {/* Top Navigation Header (No Cloud DB Settings Button) */}
@@ -1140,47 +1419,82 @@ export default function KanbanBoard() {
             </div>
           </div>
 
-          {/* Month Switcher */}
+          {/* Month Switcher (Locked for Viewer) */}
           <div className="flex items-center gap-1.5 bg-[#f9e1d3]/60 border border-[#cc8867]/30 rounded-xl p-1.5 w-full sm:w-auto justify-between sm:justify-start">
-            <button
-              onClick={() => setSelectedMonth((m) => shiftMonth(m, -1))}
-              className="p-1.5 rounded-lg hover:bg-[#f9e1d3] text-[#77585e] transition"
-              title="เดือนก่อนหน้า"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-2 px-1">
-              <Calendar className="w-4 h-4 text-[#ca5151] hidden sm:inline" />
-              <span className="text-xs sm:text-sm font-bold text-[#77585e] text-center">
-                {formatThaiMonth(selectedMonth)}
-              </span>
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) =>
-                  e.target.value && setSelectedMonth(e.target.value)
-                }
-                className="bg-white text-xs font-semibold text-[#77585e] rounded-lg px-2 py-1 border border-[#cc8867]/40 focus:outline-none focus:border-[#ca5151]"
-              />
-            </div>
-            <button
-              onClick={() => setSelectedMonth((m) => shiftMonth(m, 1))}
-              className="p-1.5 rounded-lg hover:bg-[#f9e1d3] text-[#77585e] transition"
-              title="เดือนถัดไป"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            {isOwner ? (
+              <>
+                <button
+                  onClick={() => setSelectedMonth((m) => shiftMonth(m, -1))}
+                  className="p-1.5 rounded-lg hover:bg-[#f9e1d3] text-[#77585e] transition"
+                  title="เดือนก่อนหน้า"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-2 px-1">
+                  <Calendar className="w-4 h-4 text-[#ca5151] hidden sm:inline" />
+                  <span className="text-xs sm:text-sm font-bold text-[#77585e] text-center">
+                    {formatThaiMonth(selectedMonth)}
+                  </span>
+                  <input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) =>
+                      e.target.value && setSelectedMonth(e.target.value)
+                    }
+                    className="bg-white text-xs font-semibold text-[#77585e] rounded-lg px-2 py-1 border border-[#cc8867]/40 focus:outline-none focus:border-[#ca5151]"
+                  />
+                </div>
+                <button
+                  onClick={() => setSelectedMonth((m) => shiftMonth(m, 1))}
+                  className="p-1.5 rounded-lg hover:bg-[#f9e1d3] text-[#77585e] transition"
+                  title="เดือนถัดไป"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-1">
+                <Calendar className="w-4 h-4 text-[#ca5151]" />
+                <span className="text-xs sm:text-sm font-bold text-[#77585e]">
+                  เดือนปัจจุบัน: {formatThaiMonth(selectedMonth)}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Right Action (Only Add New Task) */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              onClick={() => openCreateModal("todo")}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#ca5151] hover:bg-[#b03e3e] text-white shadow-md shadow-[#ca5151]/25 transition"
-            >
-              <Plus className="w-4 h-4" />
-              <span>เพิ่มงานใหม่</span>
-            </button>
+          {/* Right Action (Role Badge + Sign Out + Owner Add Task) */}
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#fdf7f2] border border-[#f9e1d3] text-xs">
+              <span
+                className={`font-bold px-2 py-0.5 rounded-md ${
+                  isOwner
+                    ? "bg-[#ca5151]/15 text-[#ca5151]"
+                    : "bg-[#789ea5]/20 text-[#4a6b72]"
+                }`}
+              >
+                {isOwner ? "Owner" : "Viewer (ดูอย่างเดียว)"}
+              </span>
+              <span className="text-[11px] text-[#77585e]/80 max-w-[140px] truncate hidden md:inline">
+                {authUser.email}
+              </span>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-[11px] font-bold text-[#ca5151] hover:underline ml-1"
+              >
+                ออกจากระบบ
+              </button>
+            </div>
+
+            {isOwner && (
+              <button
+                onClick={() => openCreateModal("todo")}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-[#ca5151] hover:bg-[#b03e3e] text-white shadow-md shadow-[#ca5151]/25 transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>เพิ่มงานใหม่</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1211,19 +1525,21 @@ export default function KanbanBoard() {
                 โควต้างานแต่ละขนาดประจำเดือน ({formatThaiMonth(selectedMonth)})
               </h2>
             </div>
-            <button
-              onClick={() => setIsEditingQuotas((v) => !v)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                isEditingQuotas
-                  ? "bg-[#77585e] text-white border-[#77585e] shadow-sm"
-                  : "bg-[#f3e8ff] text-[#5b3b8c] border-[#d8b4fe] hover:bg-[#e9d5ff]"
-              }`}
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>
-                {isEditingQuotas ? "บันทึกโควต้าเรียบร้อย" : "ปรับจำนวนโควต้า"}
-              </span>
-            </button>
+            {isOwner && (
+              <button
+                onClick={() => setIsEditingQuotas((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                  isEditingQuotas
+                    ? "bg-[#77585e] text-white border-[#77585e] shadow-sm"
+                    : "bg-[#f3e8ff] text-[#5b3b8c] border-[#d8b4fe] hover:bg-[#e9d5ff]"
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>
+                  {isEditingQuotas ? "บันทึกโควต้าเรียบร้อย" : "ปรับจำนวนโควต้า"}
+                </span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
@@ -1343,7 +1659,11 @@ export default function KanbanBoard() {
         </div>
 
         {/* Overall Progress & Financial Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
+        <div
+          className={`grid gap-2.5 sm:gap-3.5 ${
+            isOwner ? "grid-cols-2 lg:grid-cols-5" : "grid-cols-2"
+          }`}
+        >
           <div className="bg-white/90 border border-[#789ea5]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-[#77585e] font-semibold mb-1.5">
               <span>ส่งงานแล้วเดือนนี้</span>
@@ -1362,44 +1682,48 @@ export default function KanbanBoard() {
             </p>
           </div>
 
-          <div className="bg-white/90 border border-[#789ea5]/40 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
-            <p className="text-xs text-[#789ea5] font-semibold">
-              ยอดรวมที่ตกลงเดือนนี้
-            </p>
-            <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
-              ฿{formatTHB(stats.totalRevenue)}
-            </p>
-            <p className="text-[11px] text-[#789ea5] font-semibold mt-0.5">
-              รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}
-            </p>
-          </div>
+          {isOwner && (
+            <>
+              <div className="bg-white/90 border border-[#789ea5]/40 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+                <p className="text-xs text-[#789ea5] font-semibold">
+                  ยอดรวมที่ตกลงเดือนนี้
+                </p>
+                <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
+                  ฿{formatTHB(stats.totalRevenue)}
+                </p>
+                <p className="text-[11px] text-[#789ea5] font-semibold mt-0.5">
+                  รับมาแล้ว: ฿{formatTHB(stats.totalCollected)}
+                </p>
+              </div>
 
-          <div
-            className={`rounded-2xl p-3.5 shadow-sm flex flex-col justify-between border ${
-              stats.deliveredUnpaidCount > 0
-                ? "bg-[#ffd590]/35 border-[#cc8867]"
-                : "bg-white/90 border-[#d8b4fe]"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-1">
-              <p className="text-xs text-[#6b46c1] font-semibold">
-                รอเก็บส่วนที่เหลือตอนส่ง
-              </p>
-              {stats.deliveredUnpaidCount > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#ca5151] text-white">
-                  🚨 ส่งแล้วค้างจ่าย {stats.deliveredUnpaidCount} งาน
-                </span>
-              )}
-            </div>
-            <p className="text-lg sm:text-xl font-bold text-[#ca5151] mt-1">
-              ฿{formatTHB(stats.totalRemainingToCollect)}
-            </p>
-            <p className="text-[11px] text-[#77585e]/80 mt-0.5">
-              {stats.totalRemainingShippingToCollect > 0
-                ? `ค่างาน ฿${formatTHB(stats.totalRemainingWorkToCollect)} • ค่าส่ง ฿${formatTHB(stats.totalRemainingShippingToCollect)}`
-                : "ยอดค้างชำระเมื่อส่งมอบ"}
-            </p>
-          </div>
+              <div
+                className={`rounded-2xl p-3.5 shadow-sm flex flex-col justify-between border ${
+                  stats.deliveredUnpaidCount > 0
+                    ? "bg-[#ffd590]/35 border-[#cc8867]"
+                    : "bg-white/90 border-[#d8b4fe]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-xs text-[#6b46c1] font-semibold">
+                    รอเก็บส่วนที่เหลือตอนส่ง
+                  </p>
+                  {stats.deliveredUnpaidCount > 0 && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#ca5151] text-white">
+                      🚨 ส่งแล้วค้างจ่าย {stats.deliveredUnpaidCount} งาน
+                    </span>
+                  )}
+                </div>
+                <p className="text-lg sm:text-xl font-bold text-[#ca5151] mt-1">
+                  ฿{formatTHB(stats.totalRemainingToCollect)}
+                </p>
+                <p className="text-[11px] text-[#77585e]/80 mt-0.5">
+                  {stats.totalRemainingShippingToCollect > 0
+                    ? `ค่างาน ฿${formatTHB(stats.totalRemainingWorkToCollect)} • ค่าส่ง ฿${formatTHB(stats.totalRemainingShippingToCollect)}`
+                    : "ยอดค้างชำระเมื่อส่งมอบ"}
+                </p>
+              </div>
+            </>
+          )}
 
           {/* Overdue Card: Dimmed & No Icon when 0 */}
           <div
@@ -1448,30 +1772,32 @@ export default function KanbanBoard() {
             {stats.overdue > 0 && <span className="text-2xl">🚨</span>}
           </div>
 
-          {/* Monthly Shipping Cost Card (by actual shipped_at date) */}
-          <div className="col-span-2 lg:col-span-1 bg-white/90 border border-[#cc8867]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center justify-between gap-1">
-              <p className="text-xs text-[#77585e] font-semibold">
-                ค่าขนส่งเดือนนี้ (วันส่งจริง)
+          {/* Monthly Shipping Cost Card (Owner only) */}
+          {isOwner && (
+            <div className="col-span-2 lg:col-span-1 bg-white/90 border border-[#cc8867]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-xs text-[#77585e] font-semibold">
+                  ค่าขนส่งเดือนนี้ (วันส่งจริง)
+                </p>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#f9e1d3] text-[#77585e]">
+                  {monthlyShippingStats.hopCount} ขั้น
+                </span>
+              </div>
+              <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
+                ฿{formatTHB(monthlyShippingStats.total)}
               </p>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#f9e1d3] text-[#77585e]">
-                {monthlyShippingStats.hopCount} ขั้น
-              </span>
+              <div className="text-[11px] text-[#77585e]/85 mt-0.5 space-y-0.5">
+                <p>
+                  ปกติ ฿{formatTHB(monthlyShippingStats.normalTotal)} •
+                  ด่วน/พิเศษ ฿{formatTHB(monthlyShippingStats.specialTotal)}
+                </p>
+                <p className="text-[#77585e]/75">
+                  ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)} • ลูกค้า ฿
+                  {formatTHB(monthlyShippingStats.customerTotal)}
+                </p>
+              </div>
             </div>
-            <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
-              ฿{formatTHB(monthlyShippingStats.total)}
-            </p>
-            <div className="text-[11px] text-[#77585e]/85 mt-0.5 space-y-0.5">
-              <p>
-                ปกติ ฿{formatTHB(monthlyShippingStats.normalTotal)} •
-                ด่วน/พิเศษ ฿{formatTHB(monthlyShippingStats.specialTotal)}
-              </p>
-              <p className="text-[#77585e]/75">
-                ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)} • ลูกค้า ฿
-                {formatTHB(monthlyShippingStats.customerTotal)}
-              </p>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Search & Filter Controls */}
@@ -1538,30 +1864,32 @@ export default function KanbanBoard() {
               </select>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-[#ffd590]/45 border border-[#cc8867]/50 rounded-xl px-2.5 py-1.5">
-              <span className="text-xs text-[#77585e] font-medium">
-                การชำระเงิน:
-              </span>
-              <select
-                value={paymentFilter}
-                onChange={(e) =>
-                  setPaymentFilter(
-                    e.target.value as "all" | "paid_all" | "unpaid_any"
-                  )
-                }
-                className="bg-transparent text-xs font-bold text-[#77585e] focus:outline-none"
-              >
-                <option value="all" className="bg-white">
-                  ทั้งหมด
-                </option>
-                <option value="paid_all" className="bg-white">
-                  ✓ จ่ายครบทุกอย่างแล้ว
-                </option>
-                <option value="unpaid_any" className="bg-white">
-                  🚨 ยังไม่จ่ายค่าสินค้า / ค่าส่ง
-                </option>
-              </select>
-            </div>
+            {isOwner && (
+              <div className="flex items-center gap-1.5 bg-[#ffd590]/45 border border-[#cc8867]/50 rounded-xl px-2.5 py-1.5">
+                <span className="text-xs text-[#77585e] font-medium">
+                  การชำระเงิน:
+                </span>
+                <select
+                  value={paymentFilter}
+                  onChange={(e) =>
+                    setPaymentFilter(
+                      e.target.value as "all" | "paid_all" | "unpaid_any"
+                    )
+                  }
+                  className="bg-transparent text-xs font-bold text-[#77585e] focus:outline-none"
+                >
+                  <option value="all" className="bg-white">
+                    ทั้งหมด
+                  </option>
+                  <option value="paid_all" className="bg-white">
+                    ✓ จ่ายครบทุกอย่างแล้ว
+                  </option>
+                  <option value="unpaid_any" className="bg-white">
+                    🚨 ยังไม่จ่ายค่าสินค้า / ค่าส่ง
+                  </option>
+                </select>
+              </div>
+            )}
 
             {(searchQuery ||
               priorityFilter !== "all" ||
@@ -1679,13 +2007,15 @@ export default function KanbanBoard() {
                       {colTasks.length}
                     </span>
                   </div>
-                  <button
-                    onClick={() => openCreateModal(col.id)}
-                    className="p-1.5 rounded-lg bg-white/80 hover:bg-[#ca5151] text-[#77585e] hover:text-white transition shadow-sm"
-                    title={`เพิ่มงานใน ${col.title}`}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
+                  {isOwner && (
+                    <button
+                      onClick={() => openCreateModal(col.id)}
+                      className="p-1.5 rounded-lg bg-white/80 hover:bg-[#ca5151] text-[#77585e] hover:text-white transition shadow-sm"
+                      title={`เพิ่มงานใน ${col.title}`}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Cards Container */}
@@ -1693,12 +2023,14 @@ export default function KanbanBoard() {
                   {colTasks.length === 0 ? (
                     <div className="h-36 rounded-xl border border-dashed border-[#cc8867]/40 bg-[#fdf7f2]/60 flex flex-col items-center justify-center text-[#77585e]/60 text-xs p-3 text-center">
                       <p>ไม่มีงานในสถานะนี้</p>
-                      <button
-                        onClick={() => openCreateModal(col.id)}
-                        className="mt-1.5 text-[#ca5151] font-semibold hover:underline"
-                      >
-                        + เพิ่มงาน
-                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={() => openCreateModal(col.id)}
+                          className="mt-1.5 text-[#ca5151] font-semibold hover:underline"
+                        >
+                          + เพิ่มงาน
+                        </button>
+                      )}
                     </div>
                   ) : (
                     colTasks.map((task) => {
@@ -1713,9 +2045,11 @@ export default function KanbanBoard() {
                         task.payment_status || "unpaid_deposit";
                       const remainingBalance = getRemainingBalance(task);
                       const isCarriedOver = task.month < selectedMonth;
-                      const taskHops = allShippingHops
-                        .filter((h) => h.task_id === task.id)
-                        .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0));
+                      const taskHops = isOwner
+                        ? allShippingHops
+                            .filter((h) => h.task_id === task.id)
+                            .sort((a, b) => (a.hop_order || 0) - (b.hop_order || 0))
+                        : [];
                       const taskHopShopCost = taskHops.reduce(
                         (s, h) => s + (Number(h.shop_cost) || 0),
                         0
@@ -1726,23 +2060,32 @@ export default function KanbanBoard() {
                       );
                       const taskHopTotalCost =
                         taskHopShopCost + taskHopCustCost;
-                      const hasCustomerShipping = taskHopCustCost > 0;
+                      const hasCustomerShipping =
+                        isOwner && taskHopCustCost > 0;
                       const isShippingUnpaid =
                         hasCustomerShipping && !task.shipping_paid;
                       const isDeliveredButUnpaid =
+                        isOwner &&
                         task.status === "delivered" &&
                         (remainingBalance > 0 || isShippingUnpaid);
 
                       return (
                         <div
                           key={task.id}
-                          draggable
-                          onDragStart={(e) => onDragStart(e, task.id)}
+                          draggable={isOwner}
+                          onDragStart={(e) => {
+                            if (!isOwner) return;
+                            onDragStart(e, task.id);
+                          }}
                           onDragEnd={() => {
                             setDraggedTaskId(null);
                             setDragOverColumn(null);
                           }}
-                          className={`rounded-2xl border p-3.5 shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing space-y-2.5 ${
+                          className={`rounded-2xl border p-3.5 shadow-sm transition space-y-2.5 ${
+                            isOwner
+                              ? "hover:shadow-md cursor-grab active:cursor-grabbing"
+                              : ""
+                          } ${
                             isDeliveredButUnpaid
                               ? "border-2 border-[#cc8867] bg-[#ffd590]/20"
                               : task.status === "delivered"
@@ -1792,19 +2135,27 @@ export default function KanbanBoard() {
                               )}
                             </div>
 
-                            <button
-                              onClick={() => openEditModal(task)}
-                              className="text-xs px-1.5 py-0.5 rounded hover:bg-[#f9e1d3]/60 text-[#77585e] hover:text-[#ca5151] font-semibold shrink-0"
-                            >
-                              แก้ไข
-                            </button>
+                            {isOwner && (
+                              <button
+                                onClick={() => openEditModal(task)}
+                                className="text-xs px-1.5 py-0.5 rounded hover:bg-[#f9e1d3]/60 text-[#77585e] hover:text-[#ca5151] font-semibold shrink-0"
+                              >
+                                แก้ไข
+                              </button>
+                            )}
                           </div>
 
                           {/* Row 2: Title, Customer Name, Phone & Shipping Address */}
                           <div className="space-y-1">
                             <h3
-                              onClick={() => openEditModal(task)}
-                              className={`font-bold text-sm leading-relaxed cursor-pointer hover:text-[#ca5151] transition ${
+                              onClick={() => {
+                                if (isOwner) openEditModal(task);
+                              }}
+                              className={`font-bold text-sm leading-relaxed transition ${
+                                isOwner
+                                  ? "cursor-pointer hover:text-[#ca5151]"
+                                  : ""
+                              } ${
                                 task.status === "delivered"
                                   ? "text-[#77585e]/75"
                                   : "text-[#4a3539]"
@@ -1819,7 +2170,7 @@ export default function KanbanBoard() {
                                   {task.customer_name}
                                 </span>
                               )}
-                              {task.customer_phone && (
+                              {isOwner && task.customer_phone && (
                                 <a
                                   href={`tel:${task.customer_phone}`}
                                   onClick={(e) => e.stopPropagation()}
@@ -1828,7 +2179,7 @@ export default function KanbanBoard() {
                                   โทร: {task.customer_phone}
                                 </a>
                               )}
-                              {task.customer_email && (
+                              {isOwner && task.customer_email && (
                                 <a
                                   href={`mailto:${task.customer_email}`}
                                   onClick={(e) => e.stopPropagation()}
@@ -1839,21 +2190,42 @@ export default function KanbanBoard() {
                               )}
                             </div>
 
-                            {task.shipping_address && (
+                            {isOwner && task.shipping_address && (
                               <p className="text-[11px] text-[#77585e]/85 bg-[#fdf7f2] border border-[#f9e1d3] rounded-lg px-2 py-1 line-clamp-2">
                                 ที่อยู่: {task.shipping_address}
                               </p>
                             )}
 
                             {task.description && (
-                              <p className="text-xs text-[#77585e]/70 line-clamp-1">
+                              <p
+                                className={`text-xs text-[#77585e]/80 ${
+                                  isOwner
+                                    ? "line-clamp-1"
+                                    : "line-clamp-3 bg-[#fdf7f2]/70 rounded-lg px-2 py-1 border border-[#f9e1d3]/70"
+                                }`}
+                              >
                                 {task.description}
                               </p>
                             )}
+
+                            {!isOwner && (
+                              <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-[#77585e]">
+                                <span className="bg-[#f9e1d3]/40 px-2 py-0.5 rounded-md">
+                                  กำหนดเสร็จ:{" "}
+                                  <strong>{formatShortDate(task.due_date)}</strong>
+                                </span>
+                                <span className="bg-[#f9e1d3]/40 px-2 py-0.5 rounded-md">
+                                  ส่งถึงมือลูกค้า:{" "}
+                                  <strong>
+                                    {formatShortDate(task.delivery_date)}
+                                  </strong>
+                                </span>
+                              </div>
+                            )}
                           </div>
 
-                          {/* Row 3: Compact Payment Summary */}
-                          {task.status === "delivered" ? (
+                          {/* Row 3: Compact Payment Summary (Owner only) */}
+                          {isOwner && (task.status === "delivered" ? (
                             <div
                               className={`p-2.5 rounded-xl border space-y-1.5 ${
                                 isDeliveredButUnpaid
@@ -2031,10 +2403,10 @@ export default function KanbanBoard() {
                                 </button>
                               )}
                             </div>
-                          )}
+                          ))}
 
-                          {/* Row 4: Compact Shipping Hops Summary */}
-                          {taskHops.length > 0 && (
+                          {/* Row 4: Compact Shipping Hops Summary (Owner only) */}
+                          {isOwner && taskHops.length > 0 && (
                             <div
                               onClick={() => openEditModal(task)}
                               className="px-2.5 py-1.5 rounded-xl bg-[#f9e1d3]/45 border border-[#cc8867]/35 text-[11px] cursor-pointer hover:bg-[#f9e1d3]/75 transition"
@@ -2151,26 +2523,33 @@ export default function KanbanBoard() {
                               ส่ง: {formatShortDate(task.delivery_date)}
                             </span>
 
-                            <select
-                              value={task.status}
-                              onChange={(e) =>
-                                handleStatusChange(
-                                  task.id,
-                                  e.target.value as TaskStatus
-                                )
-                              }
-                              className="bg-[#f9e1d3]/50 border border-[#cc8867]/40 text-[#77585e] font-semibold rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#ca5151]"
-                            >
-                              {COLUMNS.map((c) => (
-                                <option
-                                  key={c.id}
-                                  value={c.id}
-                                  className="bg-white"
-                                >
-                                  {c.title}
-                                </option>
-                              ))}
-                            </select>
+                            {isOwner ? (
+                              <select
+                                value={task.status}
+                                onChange={(e) =>
+                                  handleStatusChange(
+                                    task.id,
+                                    e.target.value as TaskStatus
+                                  )
+                                }
+                                className="bg-[#f9e1d3]/50 border border-[#cc8867]/40 text-[#77585e] font-semibold rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#ca5151]"
+                              >
+                                {COLUMNS.map((c) => (
+                                  <option
+                                    key={c.id}
+                                    value={c.id}
+                                    className="bg-white"
+                                  >
+                                    {c.title}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="text-[11px] font-semibold text-[#77585e]/80 px-2 py-0.5 rounded-lg bg-[#f9e1d3]/40">
+                                {COLUMNS.find((c) => c.id === task.status)
+                                  ?.title || task.status}
+                              </span>
+                            )}
                           </div>
                         </div>
                       );

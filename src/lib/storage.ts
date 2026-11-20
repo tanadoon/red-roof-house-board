@@ -9,6 +9,7 @@ import {
   Task,
   TaskStatus,
   TaskStatusHistory,
+  UserRole,
   WorkSize,
 } from "@/types/task";
 
@@ -366,14 +367,90 @@ export function getActiveSupabaseConfig(): SupabaseConfig | null {
   };
 }
 
+let cachedClient: SupabaseClient | null = null;
+let cachedClientKey = "";
+
 export function getSupabaseClient(): SupabaseClient | null {
   const cfg = getActiveSupabaseConfig();
   if (!cfg) return null;
+  const key = `${cfg.url}|${cfg.anonKey}`;
+  if (cachedClient && cachedClientKey === key) {
+    return cachedClient;
+  }
   try {
-    return createClient(cfg.url, cfg.anonKey);
+    cachedClient = createClient(cfg.url, cfg.anonKey);
+    cachedClientKey = key;
+    return cachedClient;
   } catch {
     return null;
   }
+}
+
+export async function fetchCurrentUserRole(userId?: string): Promise<UserRole> {
+  const client = getSupabaseClient();
+  if (!client || !userId) return "viewer";
+  try {
+    const { data, error } = await client
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!error && data?.role === "owner") {
+      return "owner";
+    }
+  } catch {
+    // Default to viewer
+  }
+  return "viewer";
+}
+
+export async function signInWithEmailPassword(email: string, password: string) {
+  const client = getSupabaseClient();
+  if (!client) throw new Error("ไม่พบการตั้งค่า Supabase");
+  const { data, error } = await client.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function signUpWithEmailPassword(email: string, password: string) {
+  const client = getSupabaseClient();
+  if (!client) throw new Error("ไม่พบการตั้งค่า Supabase");
+  const { data, error } = await client.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      emailRedirectTo:
+        typeof window !== "undefined"
+          ? window.location.origin + window.location.pathname
+          : undefined,
+    },
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function signInWithGoogleOAuth() {
+  const client = getSupabaseClient();
+  if (!client) throw new Error("ไม่พบการตั้งค่า Supabase");
+  const redirectTo =
+    typeof window !== "undefined"
+      ? window.location.origin + window.location.pathname
+      : undefined;
+  const { data, error } = await client.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function signOutUser() {
+  const client = getSupabaseClient();
+  if (!client) return;
+  await client.auth.signOut();
 }
 
 export function loadLocalTasks(): Task[] {
@@ -404,13 +481,55 @@ function filterTasksWithCarryOver(allTasks: Task[], targetMonth: string): Task[]
   );
 }
 
-export async function fetchTasksByMonth(month: string): Promise<{
+export async function fetchTasksByMonth(
+  month: string,
+  role: UserRole = "owner"
+): Promise<{
   tasks: Task[];
   mode: "supabase" | "local";
   error?: string;
 }> {
   const client = getSupabaseClient();
   if (client) {
+    if (role === "viewer") {
+      const { data, error } = await client
+        .from("viewer_tasks")
+        .select("*")
+        .order("position", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      if (!error && data) {
+        const sanitized = (data as Partial<Task>[]).map((row) => ({
+          id: row.id || "",
+          title: row.title || "",
+          customer_name: row.customer_name || "",
+          customer_phone: "",
+          customer_email: "",
+          shipping_address: "",
+          description: row.description || "",
+          status: row.status || "todo",
+          priority: row.priority || "medium",
+          work_size: row.work_size || "A4",
+          agreed_price: 0,
+          payment_status: "unpaid_deposit" as const,
+          deposit_amount: 0,
+          shipping_paid: false,
+          month: row.month || month,
+          due_date: row.due_date || null,
+          delivery_date: row.delivery_date || null,
+          position: row.position ?? 0,
+          created_at: row.created_at || "",
+          updated_at: row.updated_at || "",
+        }));
+        return { tasks: sanitized, mode: "supabase" };
+      }
+      return {
+        tasks: [],
+        mode: "supabase",
+        error: error?.message || "ไม่สามารถโหลดข้อมูลมุมมอง Viewer ได้",
+      };
+    }
+
     const { data, error } = await client
       .from("tasks")
       .select("*")
@@ -578,7 +697,10 @@ export function saveLocalShippingHops(hops: ShippingHop[]): void {
   localStorage.setItem(LOCAL_HOPS_KEY, JSON.stringify(hops));
 }
 
-export async function fetchAllShippingHops(): Promise<ShippingHop[]> {
+export async function fetchAllShippingHops(
+  role: UserRole = "owner"
+): Promise<ShippingHop[]> {
+  if (role === "viewer") return [];
   const client = getSupabaseClient();
   if (client) {
     const { data, error } = await client

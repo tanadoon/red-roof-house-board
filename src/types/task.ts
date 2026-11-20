@@ -125,6 +125,8 @@ export interface ShippingHopDraft {
   shipped_at: string;
 }
 
+export type UserRole = "owner" | "viewer";
+
 export interface TaskStatusHistory {
   id: string;
   task_id: string;
