@@ -1413,9 +1413,6 @@ export default function KanbanBoard() {
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-[#77585e]">
                 Red Roof House Board
               </h1>
-              <p className="text-[11px] sm:text-xs text-[#789ea5] font-medium">
-                ระบบแทรกกิ้งคิวงาน โควต้ารายเดือน มัดจำ และสถานะการจัดส่งลูกค้า
-              </p>
             </div>
           </div>
 
