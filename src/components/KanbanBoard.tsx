@@ -1472,7 +1472,7 @@ export default function KanbanBoard() {
                     : "bg-[#789ea5]/20 text-[#4a6b72]"
                 }`}
               >
-                {isOwner ? "Owner" : "Viewer (ดูอย่างเดียว)"}
+                {isOwner ? "Owner" : "Viewer"}
               </span>
               <span className="text-[11px] text-[#77585e]/80 max-w-[140px] truncate hidden md:inline">
                 {authUser.email}
@@ -1522,7 +1522,7 @@ export default function KanbanBoard() {
             <div className="flex items-center gap-2">
               <span className="w-2 h-5 rounded-full bg-[#ca5151]" />
               <h2 className="text-xs sm:text-sm font-bold text-[#77585e]">
-                โควต้างานแต่ละขนาดประจำเดือน ({formatThaiMonth(selectedMonth)})
+                โควต้างานแต่ละขนาด — {formatThaiMonth(selectedMonth)}
               </h2>
             </div>
             {isOwner && (
