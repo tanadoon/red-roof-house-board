@@ -382,7 +382,7 @@ export default function KanbanBoard() {
         const res = await signUpWithEmailPassword(authEmail, authPassword);
         if (!res.session) {
           setAuthNotice(
-            "สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี จากนั้นเข้าสู่ระบบ (สิทธิ์เริ่มต้น: Viewer)"
+            "สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี จากนั้นเข้าสู่ระบบ"
           );
         }
       }
@@ -1271,7 +1271,7 @@ export default function KanbanBoard() {
               Red Roof House Board
             </h1>
             <p className="text-xs text-[#789ea5] font-medium">
-              เข้าสู่ระบบเพื่อดูหรือจัดการคิวงาน (บัญชีใหม่จะได้รับสิทธิ์ Viewer)
+              เข้าสู่ระบบ
             </p>
           </div>
 
@@ -1337,7 +1337,7 @@ export default function KanbanBoard() {
                   : "text-[#77585e]/75"
               }`}
             >
-              สมัครสมาชิก (Viewer)
+              สมัครสมาชิก
             </button>
           </div>
 
@@ -1390,7 +1390,7 @@ export default function KanbanBoard() {
                 ? "กำลังดำเนินการ..."
                 : authMode === "login"
                 ? "เข้าสู่ระบบ"
-                : "สมัครสมาชิก (รับสิทธิ์ Viewer)"}
+                : "สมัครสมาชิก"}
             </button>
           </form>
         </div>

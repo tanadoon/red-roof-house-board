@@ -815,7 +815,7 @@
             });
             if (error) throw error;
             if (!data.session) {
-              setAuthNotice("สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี จากนั้นเข้าสู่ระบบ (สิทธิ์เริ่มต้น: Viewer)");
+              setAuthNotice("สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี จากนั้นเข้าสู่ระบบ");
             }
           }
         } catch (err) {
@@ -1605,7 +1605,7 @@
                 />
                 <h1 className="text-lg font-bold text-[#77585e]">Red Roof House Board</h1>
                 <p className="text-xs text-[#789ea5] font-medium">
-                  เข้าสู่ระบบเพื่อดูหรือจัดการคิวงาน (บัญชีใหม่จะได้รับสิทธิ์ Viewer)
+                  เข้าสู่ระบบ
                 </p>
               </div>
 
@@ -1647,7 +1647,7 @@
                     authMode === "signup" ? "bg-white text-[#ca5151] shadow-sm" : "text-[#77585e]/75"
                   }`}
                 >
-                  สมัครสมาชิก (Viewer)
+                  สมัครสมาชิก
                 </button>
               </div>
 
@@ -1696,7 +1696,7 @@
                     ? "กำลังดำเนินการ..."
                     : authMode === "login"
                     ? "เข้าสู่ระบบ"
-                    : "สมัครสมาชิก (รับสิทธิ์ Viewer)"}
+                    : "สมัครสมาชิก"}
                 </button>
               </form>
             </div>
