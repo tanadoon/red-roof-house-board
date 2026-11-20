@@ -39,7 +39,9 @@ import {
   getDefaultQuotas,
   loadQuotas,
   recordTaskStatusTransition,
+  reopenDeliveredTimer,
   replaceTaskShippingHops,
+  stopDeliveredTimer,
   subscribeToRealtimeChanges,
   updateQuota,
   updateTask,
@@ -861,8 +863,25 @@ export default function KanbanBoard() {
           due_date: formDueDate || null,
           delivery_date: formDeliveryDate || null,
         });
+        const isNowAllPaid =
+          getRemainingBalance({
+            agreed_price: agreedPriceNum,
+            payment_status: formPaymentStatus,
+            deposit_amount: depositNum,
+          }) === 0 &&
+          (modalShippingTotals.customerTotal === 0 || formShippingPaid);
         if (editingTask.status !== formStatus) {
-          await recordTaskStatusTransition(editingTask.id, formStatus);
+          await recordTaskStatusTransition(
+            editingTask.id,
+            formStatus,
+            formStatus === "delivered" && isNowAllPaid
+          );
+        } else if (formStatus === "delivered") {
+          if (isNowAllPaid) {
+            await stopDeliveredTimer(editingTask.id);
+          } else {
+            await reopenDeliveredTimer(editingTask.id);
+          }
         }
       } else {
         const payload: CreateTaskInput = {
@@ -885,7 +904,18 @@ export default function KanbanBoard() {
         };
         const created = await createTask(payload);
         savedTaskId = created.id;
-        await recordTaskStatusTransition(created.id, formStatus);
+        const isNewAllPaid =
+          getRemainingBalance({
+            agreed_price: agreedPriceNum,
+            payment_status: formPaymentStatus,
+            deposit_amount: depositNum,
+          }) === 0 &&
+          (modalShippingTotals.customerTotal === 0 || formShippingPaid);
+        await recordTaskStatusTransition(
+          created.id,
+          formStatus,
+          formStatus === "delivered" && isNewAllPaid
+        );
       }
 
       if (savedTaskId) {
@@ -957,7 +987,18 @@ export default function KanbanBoard() {
         ...extraPayment,
       });
       if (target.status !== newStatus) {
-        await recordTaskStatusTransition(taskId, newStatus);
+        const afterWorkPaid =
+          alsoMarkPaid || getRemainingBalance(target) === 0;
+        const custShip = getTaskCustomerShippingCost(taskId);
+        const afterShipPaid =
+          custShip === 0 ||
+          alsoMarkShippingPaid ||
+          Boolean(target.shipping_paid);
+        await recordTaskStatusTransition(
+          taskId,
+          newStatus,
+          newStatus === "delivered" && afterWorkPaid && afterShipPaid
+        );
         fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
       }
     } catch (err: unknown) {
@@ -996,6 +1037,13 @@ export default function KanbanBoard() {
         payment_status: "fully_paid",
         deposit_amount: price,
       });
+      if (task.status === "delivered") {
+        const custShip = getTaskCustomerShippingCost(task.id);
+        if (custShip === 0 || task.shipping_paid) {
+          await stopDeliveredTimer(task.id);
+          fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+        }
+      }
     } catch {
       await loadBoard(selectedMonth);
     }
@@ -1007,6 +1055,15 @@ export default function KanbanBoard() {
     );
     try {
       await updateTask(task.id, { shipping_paid: paid });
+      if (task.status === "delivered") {
+        if (paid && getRemainingBalance(task) === 0) {
+          await stopDeliveredTimer(task.id);
+          fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+        } else if (!paid) {
+          await reopenDeliveredTimer(task.id);
+          fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+        }
+      }
     } catch {
       await loadBoard(selectedMonth);
     }
@@ -1024,6 +1081,10 @@ export default function KanbanBoard() {
     );
     try {
       await updateTask(task.id, updates);
+      if (task.status === "delivered") {
+        await stopDeliveredTimer(task.id);
+        fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+      }
     } catch {
       await loadBoard(selectedMonth);
     }
@@ -2014,17 +2075,24 @@ export default function KanbanBoard() {
                               activeHist?.entered_at ||
                               task.updated_at ||
                               task.created_at;
+                            const isDeliveredPaidStopped =
+                              task.status === "delivered" &&
+                              !isDeliveredButUnpaid;
+                            const stoppedAt = isDeliveredPaidStopped
+                              ? activeHist?.exited_at || null
+                              : null;
                             const durMs = getDurationMs(
                               enteredAt,
-                              null,
+                              stoppedAt,
                               nowTick
                             );
                             const isStaleInLane =
-                              task.status !== "delivered" &&
+                              (task.status !== "delivered" ||
+                                isDeliveredButUnpaid) &&
                               durMs >= 3 * 24 * 60 * 60 * 1000;
                             const durText = formatDuration(
                               enteredAt,
-                              null,
+                              stoppedAt,
                               nowTick
                             );
                             return (
@@ -2034,17 +2102,27 @@ export default function KanbanBoard() {
                                   onClick={() => openEditModal(task)}
                                   title="คลิกเพื่อดูประวัติเวลาทุกเลน"
                                   className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md border transition ${
-                                    task.status === "delivered"
+                                    isDeliveredPaidStopped
                                       ? "bg-[#6b9078]/12 text-[#4c6b57] border-[#6b9078]/35"
+                                      : task.status === "delivered" &&
+                                        isDeliveredButUnpaid
+                                      ? "bg-[#ffd590]/60 text-[#ca5151] border-[#cc8867]"
                                       : isStaleInLane
                                       ? "bg-[#ffd590]/60 text-[#ca5151] border-[#cc8867]"
                                       : "bg-[#fdf7f2] text-[#77585e]/85 border-[#f9e1d3] hover:border-[#cc8867]"
                                   }`}
                                 >
-                                  <span>⏱</span>
                                   <span>
-                                    {task.status === "delivered"
-                                      ? `ส่งแล้ว ${durText}`
+                                    {isDeliveredPaidStopped ? "✓" : "⏱"}
+                                  </span>
+                                  <span>
+                                    {isDeliveredPaidStopped
+                                      ? stoppedAt
+                                        ? `จ่ายครบแล้ว (หยุดที่ ${durText})`
+                                        : "จ่ายครบแล้ว (หยุดจับเวลา)"
+                                      : task.status === "delivered" &&
+                                        isDeliveredButUnpaid
+                                      ? `รอเก็บเงิน ${durText}`
                                       : isStaleInLane
                                       ? `ค้างเลนนี้ ${durText}`
                                       : `ในเลนนี้ ${durText}`}
@@ -2876,6 +2954,12 @@ export default function KanbanBoard() {
                     taskTimeline.length > 0
                       ? taskTimeline[0].entered_at
                       : editingTask.created_at;
+                  const isTimerStopped =
+                    taskTimeline.length > 0 &&
+                    taskTimeline.every((h) => Boolean(h.exited_at));
+                  const lastStoppedAt = isTimerStopped
+                    ? taskTimeline[taskTimeline.length - 1].exited_at
+                    : null;
                   return (
                     <div className="p-3.5 rounded-2xl bg-[#789ea5]/10 border border-[#789ea5]/35 space-y-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2884,7 +2968,16 @@ export default function KanbanBoard() {
                         </span>
                         <span className="text-[11px] font-semibold text-[#77585e]">
                           รวมตั้งแต่เปิดงาน:{" "}
-                          {formatDuration(totalFirstEntered, null, nowTick)}
+                          {formatDuration(
+                            totalFirstEntered,
+                            lastStoppedAt,
+                            nowTick
+                          )}
+                          {isTimerStopped && (
+                            <span className="ml-1 text-[#6b9078] font-bold">
+                              (หยุดจับเวลาแล้ว)
+                            </span>
+                          )}
                         </span>
                       </div>
                       {taskTimeline.length === 0 ? (

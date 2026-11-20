@@ -671,9 +671,11 @@ export async function fetchAllStatusHistory(): Promise<TaskStatusHistory[]> {
 
 export async function recordTaskStatusTransition(
   taskId: string,
-  newStatus: TaskStatus
+  newStatus: TaskStatus,
+  closeImmediately = false
 ): Promise<void> {
   const nowIso = new Date().toISOString();
+  const exitedAt = closeImmediately ? nowIso : null;
 
   // Always update local history cache
   const local = loadLocalStatusHistory().map((h) =>
@@ -684,7 +686,7 @@ export async function recordTaskStatusTransition(
     task_id: taskId,
     status: newStatus,
     entered_at: nowIso,
-    exited_at: null,
+    exited_at: exitedAt,
     created_at: nowIso,
   });
   saveLocalStatusHistory(local);
@@ -703,9 +705,69 @@ export async function recordTaskStatusTransition(
           task_id: taskId,
           status: newStatus,
           entered_at: nowIso,
-          exited_at: null,
+          exited_at: exitedAt,
         },
       ]);
+    } catch {
+      // Ignore if table not yet migrated
+    }
+  }
+}
+
+export async function stopDeliveredTimer(taskId: string): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const local = loadLocalStatusHistory().map((h) =>
+    h.task_id === taskId && h.status === "delivered" && !h.exited_at
+      ? { ...h, exited_at: nowIso }
+      : h
+  );
+  saveLocalStatusHistory(local);
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      await client
+        .from("task_status_history")
+        .update({ exited_at: nowIso })
+        .eq("task_id", taskId)
+        .eq("status", "delivered")
+        .is("exited_at", null);
+    } catch {
+      // Ignore if table not yet migrated
+    }
+  }
+}
+
+export async function reopenDeliveredTimer(taskId: string): Promise<void> {
+  const local = loadLocalStatusHistory();
+  let lastIdx = -1;
+  for (let i = local.length - 1; i >= 0; i--) {
+    if (local[i].task_id === taskId && local[i].status === "delivered") {
+      lastIdx = i;
+      break;
+    }
+  }
+  if (lastIdx >= 0 && local[lastIdx].exited_at) {
+    local[lastIdx] = { ...local[lastIdx], exited_at: null };
+    saveLocalStatusHistory(local);
+  }
+
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data } = await client
+        .from("task_status_history")
+        .select("id, exited_at")
+        .eq("task_id", taskId)
+        .eq("status", "delivered")
+        .order("entered_at", { ascending: false })
+        .limit(1);
+      if (data && data.length > 0 && data[0].exited_at) {
+        await client
+          .from("task_status_history")
+          .update({ exited_at: null })
+          .eq("id", data[0].id);
+      }
     } catch {
       // Ignore if table not yet migrated
     }

@@ -628,8 +628,9 @@
         setAllStatusHistory(loadLocalStatusHistory());
       };
 
-      const recordStatusTransition = async (taskId, newStatus) => {
+      const recordStatusTransition = async (taskId, newStatus, closeImmediately = false) => {
         const nowIso = new Date().toISOString();
+        const exitedAt = closeImmediately ? nowIso : null;
         setAllStatusHistory((prev) => {
           const updated = prev.map((h) =>
             h.task_id === taskId && !h.exited_at ? { ...h, exited_at: nowIso } : h
@@ -639,7 +640,7 @@
             task_id: taskId,
             status: newStatus,
             entered_at: nowIso,
-            exited_at: null,
+            exited_at: exitedAt,
             created_at: nowIso,
           };
           const next = [...updated, nextEntry];
@@ -660,11 +661,74 @@
                 task_id: taskId,
                 status: newStatus,
                 entered_at: nowIso,
-                exited_at: null,
+                exited_at: exitedAt,
               },
             ]);
           } catch {
             // Ignore if table not yet migrated
+          }
+        }
+      };
+
+      const stopDeliveredTimer = async (taskId) => {
+        const nowIso = new Date().toISOString();
+        setAllStatusHistory((prev) => {
+          const next = prev.map((h) =>
+            h.task_id === taskId && h.status === "delivered" && !h.exited_at
+              ? { ...h, exited_at: nowIso }
+              : h
+          );
+          saveLocalStatusHistory(next);
+          return next;
+        });
+        const client = getSupabaseClient();
+        if (client) {
+          try {
+            await client
+              .from("task_status_history")
+              .update({ exited_at: nowIso })
+              .eq("task_id", taskId)
+              .eq("status", "delivered")
+              .is("exited_at", null);
+          } catch {
+            // Ignore
+          }
+        }
+      };
+
+      const reopenDeliveredTimer = async (taskId) => {
+        setAllStatusHistory((prev) => {
+          let lastIdx = -1;
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].task_id === taskId && prev[i].status === "delivered") {
+              lastIdx = i;
+              break;
+            }
+          }
+          if (lastIdx < 0 || !prev[lastIdx].exited_at) return prev;
+          const next = [...prev];
+          next[lastIdx] = { ...next[lastIdx], exited_at: null };
+          saveLocalStatusHistory(next);
+          return next;
+        });
+        const client = getSupabaseClient();
+        if (client) {
+          try {
+            const { data } = await client
+              .from("task_status_history")
+              .select("id, exited_at")
+              .eq("task_id", taskId)
+              .eq("status", "delivered")
+              .order("entered_at", { ascending: false })
+              .limit(1);
+            if (data && data.length > 0 && data[0].exited_at) {
+              await client
+                .from("task_status_history")
+                .update({ exited_at: null })
+                .eq("id", data[0].id);
+            }
+          } catch {
+            // Ignore
           }
         }
       };
@@ -1124,8 +1188,25 @@
           }
           const all = loadLocalTasks().map((t) => (t.id === editingTask.id ? { ...t, ...updates } : t));
           saveLocalTasks(all);
+          const isNowAllPaid =
+            getRemainingBalance({
+              agreed_price: agreedPriceNum,
+              payment_status: formPaymentStatus,
+              deposit_amount: depositNum,
+            }) === 0 &&
+            (modalShippingTotals.customerTotal === 0 || formShippingPaid);
           if (editingTask.status !== formStatus) {
-            await recordStatusTransition(editingTask.id, formStatus);
+            await recordStatusTransition(
+              editingTask.id,
+              formStatus,
+              formStatus === "delivered" && isNowAllPaid
+            );
+          } else if (formStatus === "delivered") {
+            if (isNowAllPaid) {
+              await stopDeliveredTimer(editingTask.id);
+            } else {
+              await reopenDeliveredTimer(editingTask.id);
+            }
           }
         } else {
           const newTask = {
@@ -1160,7 +1241,18 @@
           const all = [...loadLocalTasks(), { ...newTask, id: savedTaskId }];
           saveLocalTasks(all);
           if (savedTaskId) {
-            await recordStatusTransition(savedTaskId, formStatus);
+            const isNewAllPaid =
+              getRemainingBalance({
+                agreed_price: agreedPriceNum,
+                payment_status: formPaymentStatus,
+                deposit_amount: depositNum,
+              }) === 0 &&
+              (modalShippingTotals.customerTotal === 0 || formShippingPaid);
+            await recordStatusTransition(
+              savedTaskId,
+              formStatus,
+              formStatus === "delivered" && isNewAllPaid
+            );
           }
         }
 
@@ -1221,7 +1313,15 @@
         );
         saveLocalTasks(all);
         if (target.status !== newStatus) {
-          await recordStatusTransition(taskId, newStatus);
+          const afterWorkPaid = alsoMarkPaid || getRemainingBalance(target) === 0;
+          const custShip = getTaskCustomerShippingCost(taskId);
+          const afterShipPaid =
+            custShip === 0 || alsoMarkShippingPaid || Boolean(target.shipping_paid);
+          await recordStatusTransition(
+            taskId,
+            newStatus,
+            newStatus === "delivered" && afterWorkPaid && afterShipPaid
+          );
         }
       };
 
@@ -1256,6 +1356,12 @@
           t.id === task.id ? { ...t, payment_status: "fully_paid", deposit_amount: price } : t
         );
         saveLocalTasks(all);
+        if (task.status === "delivered") {
+          const custShip = getTaskCustomerShippingCost(task.id);
+          if (custShip === 0 || task.shipping_paid) {
+            await stopDeliveredTimer(task.id);
+          }
+        }
       };
 
       const handleToggleShippingPaid = async (task, paid) => {
@@ -1272,6 +1378,13 @@
           t.id === task.id ? { ...t, shipping_paid: paid } : t
         );
         saveLocalTasks(all);
+        if (task.status === "delivered") {
+          if (paid && getRemainingBalance(task) === 0) {
+            await stopDeliveredTimer(task.id);
+          } else if (!paid) {
+            await reopenDeliveredTimer(task.id);
+          }
+        }
       };
 
       const handleMarkAllPaid = async (task) => {
@@ -1292,6 +1405,9 @@
           t.id === task.id ? { ...t, ...updates } : t
         );
         saveLocalTasks(all);
+        if (task.status === "delivered") {
+          await stopDeliveredTimer(task.id);
+        }
       };
 
       const visibleColumns = useMemo(() => {
@@ -2042,10 +2158,16 @@
                                   (activeHist && activeHist.entered_at) ||
                                   task.updated_at ||
                                   task.created_at;
-                                const durMs = getDurationMs(enteredAt, null, nowTick);
+                                const isDeliveredPaidStopped =
+                                  task.status === "delivered" && !isDeliveredButUnpaid;
+                                const stoppedAt = isDeliveredPaidStopped
+                                  ? (activeHist && activeHist.exited_at) || null
+                                  : null;
+                                const durMs = getDurationMs(enteredAt, stoppedAt, nowTick);
                                 const isStaleInLane =
-                                  task.status !== "delivered" && durMs >= 3 * 24 * 60 * 60 * 1000;
-                                const durText = formatDuration(enteredAt, null, nowTick);
+                                  (task.status !== "delivered" || isDeliveredButUnpaid) &&
+                                  durMs >= 3 * 24 * 60 * 60 * 1000;
+                                const durText = formatDuration(enteredAt, stoppedAt, nowTick);
                                 return (
                                   <div className="flex items-center justify-between gap-2">
                                     <button
@@ -2053,17 +2175,23 @@
                                       onClick={() => openEditModal(task)}
                                       title="คลิกเพื่อดูประวัติเวลาทุกเลน"
                                       className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md border transition ${
-                                        task.status === "delivered"
+                                        isDeliveredPaidStopped
                                           ? "bg-[#6b9078]/12 text-[#4c6b57] border-[#6b9078]/35"
+                                          : task.status === "delivered" && isDeliveredButUnpaid
+                                          ? "bg-[#ffd590]/60 text-[#ca5151] border-[#cc8867]"
                                           : isStaleInLane
                                           ? "bg-[#ffd590]/60 text-[#ca5151] border-[#cc8867]"
                                           : "bg-[#fdf7f2] text-[#77585e]/85 border-[#f9e1d3] hover:border-[#cc8867]"
                                       }`}
                                     >
-                                      <span>⏱</span>
+                                      <span>{isDeliveredPaidStopped ? "✓" : "⏱"}</span>
                                       <span>
-                                        {task.status === "delivered"
-                                          ? `ส่งแล้ว ${durText}`
+                                        {isDeliveredPaidStopped
+                                          ? stoppedAt
+                                            ? `จ่ายครบแล้ว (หยุดที่ ${durText})`
+                                            : "จ่ายครบแล้ว (หยุดจับเวลา)"
+                                          : task.status === "delivered" && isDeliveredButUnpaid
+                                          ? `รอเก็บเงิน ${durText}`
                                           : isStaleInLane
                                           ? `ค้างเลนนี้ ${durText}`
                                           : `ในเลนนี้ ${durText}`}
@@ -2696,6 +2824,12 @@
                       taskTimeline.length > 0
                         ? taskTimeline[0].entered_at
                         : editingTask.created_at;
+                    const isTimerStopped =
+                      taskTimeline.length > 0 &&
+                      taskTimeline.every((h) => Boolean(h.exited_at));
+                    const lastStoppedAt = isTimerStopped
+                      ? taskTimeline[taskTimeline.length - 1].exited_at
+                      : null;
                     return (
                       <div className="p-3.5 rounded-2xl bg-[#789ea5]/10 border border-[#789ea5]/35 space-y-2.5">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2703,7 +2837,10 @@
                             ⏱ ประวัติระยะเวลาแต่ละเลน (Timeline)
                           </span>
                           <span className="text-[11px] font-semibold text-[#77585e]">
-                            รวมตั้งแต่เปิดงาน: {formatDuration(totalFirstEntered, null, nowTick)}
+                            รวมตั้งแต่เปิดงาน: {formatDuration(totalFirstEntered, lastStoppedAt, nowTick)}
+                            {isTimerStopped && (
+                              <span className="ml-1 text-[#6b9078] font-bold">(หยุดจับเวลาแล้ว)</span>
+                            )}
                           </span>
                         </div>
                         {taskTimeline.length === 0 ? (
