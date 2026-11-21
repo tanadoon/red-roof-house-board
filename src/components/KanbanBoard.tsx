@@ -344,6 +344,8 @@ export default function KanbanBoard() {
   const [formTitle, setFormTitle] = useState<string>("");
   const [formCustomerName, setFormCustomerName] = useState<string>("");
   const [formCustomerPhone, setFormCustomerPhone] = useState<string>("");
+  const [formPhoneType, setFormPhoneType] = useState<"th" | "intl">("th");
+  const [formPhoneError, setFormPhoneError] = useState<string>("");
   const [formCustomerEmail, setFormCustomerEmail] = useState<string>("");
   const [formShippingAddress, setFormShippingAddress] = useState<string>("");
   const [formDesc, setFormDesc] = useState<string>("");
@@ -919,6 +921,8 @@ export default function KanbanBoard() {
     setFormTitle("");
     setFormCustomerName("");
     setFormCustomerPhone("");
+    setFormPhoneType("th");
+    setFormPhoneError("");
     setFormCustomerEmail("");
     setFormShippingAddress("");
     setFormDesc("");
@@ -942,7 +946,12 @@ export default function KanbanBoard() {
     setEditingTask(task);
     setFormTitle(task.title);
     setFormCustomerName(task.customer_name || "");
-    setFormCustomerPhone(task.customer_phone || "");
+    const rawDigits = (task.customer_phone || "").replace(/\D/g, "");
+    const detectedType =
+      rawDigits && !/^0\d{9}$/.test(rawDigits) ? "intl" : "th";
+    setFormPhoneType(detectedType);
+    setFormCustomerPhone(rawDigits);
+    setFormPhoneError("");
     setFormCustomerEmail(task.customer_email || "");
     setFormShippingAddress(task.shipping_address || "");
     setFormDesc(task.description || "");
@@ -981,7 +990,22 @@ export default function KanbanBoard() {
 
   const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim() || !formCustomerPhone.trim()) return;
+    const phoneDigits = formCustomerPhone.replace(/\D/g, "");
+    if (!formTitle.trim() || !phoneDigits) {
+      if (!phoneDigits) setFormPhoneError("กรุณากรอกเบอร์โทรศัพท์ลูกค้า");
+      return;
+    }
+    if (formPhoneType === "th" && !/^0\d{9}$/.test(phoneDigits)) {
+      setFormPhoneError(
+        "เบอร์ประเทศไทยต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0 (เช่น 0812345678)"
+      );
+      return;
+    }
+    if (formPhoneType === "intl" && !/^\d+$/.test(phoneDigits)) {
+      setFormPhoneError("เบอร์ต่างประเทศต้องเป็นตัวเลขเท่านั้น");
+      return;
+    }
+    setFormPhoneError("");
 
     const agreedPriceNum = Math.max(0, Number(formAgreedPrice) || 0);
     const depositNum =
@@ -997,7 +1021,7 @@ export default function KanbanBoard() {
         await updateTask(editingTask.id, {
           title: formTitle.trim(),
           customer_name: formCustomerName.trim(),
-          customer_phone: formCustomerPhone.trim(),
+          customer_phone: phoneDigits,
           customer_email: formCustomerEmail.trim(),
           shipping_address: formShippingAddress.trim(),
           description: formDesc.trim(),
@@ -1036,7 +1060,7 @@ export default function KanbanBoard() {
         const payload: CreateTaskInput = {
           title: formTitle.trim(),
           customer_name: formCustomerName.trim(),
-          customer_phone: formCustomerPhone.trim(),
+          customer_phone: phoneDigits,
           customer_email: formCustomerEmail.trim(),
           shipping_address: formShippingAddress.trim(),
           description: formDesc.trim(),
@@ -2862,17 +2886,87 @@ export default function KanbanBoard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#ca5151] mb-1">
-                    เบอร์โทรศัพท์ลูกค้า (สำคัญมาก) *
-                  </label>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <label className="text-xs font-bold text-[#ca5151]">
+                      เบอร์โทร *
+                    </label>
+                    <div className="inline-flex rounded-lg bg-[#f9e1d3]/60 p-0.5 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormPhoneType("th");
+                          setFormCustomerPhone((p) =>
+                            p.replace(/\D/g, "").slice(0, 10)
+                          );
+                          setFormPhoneError("");
+                        }}
+                        className={`px-2 py-0.5 rounded-md transition ${
+                          formPhoneType === "th"
+                            ? "bg-white text-[#ca5151] shadow-sm"
+                            : "text-[#77585e]/75"
+                        }`}
+                      >
+                        ไทย (10 หลัก)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormPhoneType("intl");
+                          setFormPhoneError("");
+                        }}
+                        className={`px-2 py-0.5 rounded-md transition ${
+                          formPhoneType === "intl"
+                            ? "bg-white text-[#5b3b8c] shadow-sm"
+                            : "text-[#77585e]/75"
+                        }`}
+                      >
+                        ต่างประเทศ
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="tel"
+                    inputMode="numeric"
                     required
+                    maxLength={formPhoneType === "th" ? 10 : undefined}
                     value={formCustomerPhone}
-                    onChange={(e) => setFormCustomerPhone(e.target.value)}
-                    placeholder="เช่น 081-234-5678"
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "");
+                      setFormCustomerPhone(
+                        formPhoneType === "th" ? digits.slice(0, 10) : digits
+                      );
+                      setFormPhoneError("");
+                    }}
+                    placeholder={
+                      formPhoneType === "th"
+                        ? "0812345678 (ตัวเลข 10 หลัก)"
+                        : "ตัวเลขเท่านั้น เช่น 97512102"
+                    }
                     className="w-full bg-[#ffc0b8]/20 border-2 border-[#ca5151]/50 rounded-xl px-3.5 py-2 text-sm font-semibold text-[#4a3539] focus:outline-none focus:border-[#ca5151] focus:bg-white"
                   />
+                  <div className="flex items-center justify-between mt-0.5">
+                    {formPhoneError ? (
+                      <p className="text-[10px] font-bold text-[#ca5151]">
+                        {formPhoneError}
+                      </p>
+                    ) : formPhoneType === "th" ? (
+                      <p
+                        className={`text-[10px] ${
+                          /^0\d{9}$/.test(formCustomerPhone)
+                            ? "text-[#4c6b57] font-semibold"
+                            : "text-[#77585e]/70"
+                        }`}
+                      >
+                        {/^0\d{9}$/.test(formCustomerPhone)
+                          ? "✓ รูปแบบเบอร์ไทยครบ 10 หลัก"
+                          : `กรอกตัวเลข 0xxxxxxxxx (${formCustomerPhone.length}/10 หลัก)`}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-[#5b3b8c]">
+                        เบอร์ต่างประเทศ (ตัวเลขเท่านั้น ไม่จำกัดความยาว)
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
