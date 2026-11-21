@@ -219,6 +219,16 @@ function getDueStatus(
   return "upcoming";
 }
 
+function isNearDue(dueDate: string | null, status: TaskStatus): boolean {
+  if (!dueDate || status === "delivered") return false;
+  const todayStr = getTodayStr();
+  const todayMs = new Date(`${todayStr}T00:00:00`).getTime();
+  const dueMs = new Date(`${dueDate}T00:00:00`).getTime();
+  if (Number.isNaN(todayMs) || Number.isNaN(dueMs)) return false;
+  const diffDays = Math.round((dueMs - todayMs) / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= 5;
+}
+
 function formatTHB(amount: number): string {
   return Number(amount || 0).toLocaleString("th-TH");
 }
@@ -316,6 +326,7 @@ export default function KanbanBoard() {
   const [paymentFilter, setPaymentFilter] = useState<
     "all" | "paid_all" | "unpaid_any"
   >("all");
+  const [onlyNearDue, setOnlyNearDue] = useState<boolean>(false);
   const [onlyOverdue, setOnlyOverdue] = useState<boolean>(false);
 
   // Drag state
@@ -550,6 +561,15 @@ export default function KanbanBoard() {
         if (paymentFilter === "paid_all" && !isAllPaid) return false;
         if (paymentFilter === "unpaid_any" && isAllPaid) return false;
       }
+      if (onlyNearDue) {
+        const checkDate = task.delivery_date || task.due_date;
+        if (
+          !isNearDue(task.due_date, task.status) ||
+          getDueStatus(checkDate, task.status) === "overdue"
+        ) {
+          return false;
+        }
+      }
       if (onlyOverdue) {
         const checkDate = task.delivery_date || task.due_date;
         if (getDueStatus(checkDate, task.status) !== "overdue") {
@@ -565,6 +585,7 @@ export default function KanbanBoard() {
     priorityFilter,
     sizeFilter,
     paymentFilter,
+    onlyNearDue,
     onlyOverdue,
   ]);
 
@@ -576,6 +597,13 @@ export default function KanbanBoard() {
     const overdue = tasks.filter((t) => {
       const checkDate = t.delivery_date || t.due_date;
       return getDueStatus(checkDate, t.status) === "overdue";
+    }).length;
+    const nearDue = tasks.filter((t) => {
+      const checkDate = t.delivery_date || t.due_date;
+      return (
+        isNearDue(t.due_date, t.status) &&
+        getDueStatus(checkDate, t.status) !== "overdue"
+      );
     }).length;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
@@ -613,6 +641,7 @@ export default function KanbanBoard() {
       total,
       done,
       inProgress,
+      nearDue,
       overdue,
       percent,
       totalRevenue,
@@ -1658,7 +1687,9 @@ export default function KanbanBoard() {
         {/* Overall Progress & Financial Summary Cards */}
         <div
           className={`grid gap-2.5 sm:gap-3.5 ${
-            isOwner ? "grid-cols-2 lg:grid-cols-5" : "grid-cols-2"
+            isOwner
+              ? "grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+              : "grid-cols-1 sm:grid-cols-3"
           }`}
         >
           <div className="bg-white/90 border border-[#789ea5]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
@@ -1722,11 +1753,60 @@ export default function KanbanBoard() {
             </>
           )}
 
+          {/* Near Due Card (Left of Overdue): due_date - 5 days */}
+          <div
+            onClick={() => {
+              if (stats.nearDue > 0 || onlyNearDue) {
+                setOnlyNearDue((v) => !v);
+                setOnlyOverdue(false);
+              }
+            }}
+            className={`rounded-2xl p-3.5 flex items-center justify-between border transition ${
+              onlyNearDue
+                ? "cursor-pointer bg-[#cc8867] text-white border-[#b37252] shadow-sm"
+                : stats.nearDue > 0
+                ? "cursor-pointer bg-[#ffd590]/45 border-[#cc8867] shadow-sm"
+                : "bg-white/45 border-[#f9e1d3] opacity-55"
+            }`}
+          >
+            <div>
+              <p
+                className={`text-xs font-semibold flex items-center gap-1 ${
+                  onlyNearDue
+                    ? "text-white/90"
+                    : stats.nearDue > 0
+                    ? "text-[#77585e]"
+                    : "text-slate-400"
+                }`}
+              >
+                <span>ใกล้กำหนดส่ง</span>
+                {onlyNearDue && (
+                  <span className="text-[10px] bg-white text-[#cc8867] font-bold px-1.5 py-0.2 rounded">
+                    กรองอยู่
+                  </span>
+                )}
+              </p>
+              <p
+                className={`text-xl sm:text-2xl font-bold mt-1 ${
+                  onlyNearDue
+                    ? "text-white"
+                    : stats.nearDue > 0
+                    ? "text-[#b36236]"
+                    : "text-slate-400"
+                }`}
+              >
+                {stats.nearDue} งาน
+              </p>
+            </div>
+            {stats.nearDue > 0 && <span className="text-2xl">⏰</span>}
+          </div>
+
           {/* Overdue Card: Dimmed & No Icon when 0 */}
           <div
             onClick={() => {
               if (stats.overdue > 0 || onlyOverdue) {
                 setOnlyOverdue((v) => !v);
+                setOnlyNearDue(false);
               }
             }}
             className={`rounded-2xl p-3.5 flex items-center justify-between border transition ${
@@ -1892,6 +1972,7 @@ export default function KanbanBoard() {
               priorityFilter !== "all" ||
               sizeFilter !== "all" ||
               paymentFilter !== "all" ||
+              onlyNearDue ||
               onlyOverdue) && (
               <button
                 onClick={() => {
@@ -1899,6 +1980,7 @@ export default function KanbanBoard() {
                   setPriorityFilter("all");
                   setSizeFilter("all");
                   setPaymentFilter("all");
+                  setOnlyNearDue(false);
                   setOnlyOverdue(false);
                 }}
                 className="text-xs text-[#ca5151] hover:text-[#77585e] underline px-2 font-semibold"
@@ -2033,6 +2115,9 @@ export default function KanbanBoard() {
                     colTasks.map((task) => {
                       const checkDate = task.delivery_date || task.due_date;
                       const dueState = getDueStatus(checkDate, task.status);
+                      const nearDueState =
+                        isNearDue(task.due_date, task.status) &&
+                        dueState !== "overdue";
                       const pStyle =
                         PRIORITY_STYLES[task.priority] ||
                         PRIORITY_STYLES.medium;
@@ -2122,6 +2207,12 @@ export default function KanbanBoard() {
                               {hasCustomerShipping && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#f3e8ff] text-[#5b3b8c] border border-[#d8b4fe]">
                                   คิดค่าส่ง ฿{formatTHB(taskHopCustCost)}
+                                </span>
+                              )}
+
+                              {nearDueState && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#ffd590] text-[#9a4a1a] border border-[#cc8867]">
+                                  ⏰ ใกล้กำหนดส่ง
                                 </span>
                               )}
 
