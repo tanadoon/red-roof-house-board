@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Red Roof House Board - ระบบแทรกกิ้งงานรายเดือน</title>
+  <title>redroofhouse studio - ระบบแทรกกิ้งงานรายเดือน</title>
   <link rel="icon" type="image/png" href="./favicon.png?v=1" />
   <link rel="apple-touch-icon" href="./favicon.png?v=1" />
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1051,13 +1051,14 @@
           const checkDate = t.delivery_date || t.due_date;
           return getDueStatus(checkDate, t.status) === "overdue";
         }).length;
-        const nearDue = tasks.filter((t) => {
+        const nearDueTasks = tasks.filter((t) => {
           const checkDate = t.delivery_date || t.due_date;
           return (
             isNearDue(t.due_date, t.status) &&
             getDueStatus(checkDate, t.status) !== "overdue"
           );
-        }).length;
+        });
+        const nearDue = nearDueTasks.length;
         const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
         const totalRevenue = tasks.reduce((sum, t) => sum + (Number(t.agreed_price) || 0), 0);
@@ -1081,6 +1082,7 @@
           done,
           inProgress,
           nearDue,
+          nearDueTasks,
           overdue,
           percent,
           totalRevenue,
@@ -1652,7 +1654,7 @@
                   alt="Redroof House Logo"
                   className="h-16 w-auto mx-auto rounded-2xl object-contain bg-white border border-[#f9e1d3] px-3 py-1.5 shadow-sm"
                 />
-                <h1 className="text-lg font-bold text-[#77585e]">Red Roof House Board</h1>
+                <h1 className="text-lg font-bold text-[#77585e]">redroofhouse studio</h1>
                 <p className="text-xs text-[#789ea5] font-medium">
                   เข้าสู่ระบบ
                 </p>
@@ -1766,7 +1768,7 @@
                 />
                 <div>
                   <h1 className="text-base sm:text-lg font-bold text-[#77585e]">
-                    Red Roof House Board
+                    redroofhouse studio
                   </h1>
                 </div>
               </div>
@@ -2024,13 +2026,22 @@
                     : "bg-white/45 border-[#f9e1d3] opacity-55"
                 }`}
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className={`text-xs font-semibold ${onlyNearDue ? "text-white/90" : stats.nearDue > 0 ? "text-[#77585e]" : "text-slate-400"}`}>
                     ใกล้กำหนดส่ง {onlyNearDue ? "• กรองอยู่" : ""}
                   </p>
                   <p className={`text-xl sm:text-2xl font-bold mt-1 ${onlyNearDue ? "text-white" : stats.nearDue > 0 ? "text-[#b36236]" : "text-slate-400"}`}>
                     {stats.nearDue} งาน
                   </p>
+                  {stats.nearDueTasks.length > 0 && (
+                    <div className={`mt-1.5 space-y-0.5 max-h-16 overflow-y-auto text-[11px] ${onlyNearDue ? "text-white/95" : "text-[#77585e]"}`}>
+                      {stats.nearDueTasks.map((t) => (
+                        <p key={t.id} className="truncate font-medium">
+                          - {t.customer_name || t.title}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {stats.nearDue > 0 && (
                   <span className="text-2xl">⏰</span>

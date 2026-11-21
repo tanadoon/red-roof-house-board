@@ -600,13 +600,14 @@ export default function KanbanBoard() {
       const checkDate = t.delivery_date || t.due_date;
       return getDueStatus(checkDate, t.status) === "overdue";
     }).length;
-    const nearDue = tasks.filter((t) => {
+    const nearDueTasks = tasks.filter((t) => {
       const checkDate = t.delivery_date || t.due_date;
       return (
         isNearDue(t.due_date, t.status) &&
         getDueStatus(checkDate, t.status) !== "overdue"
       );
-    }).length;
+    });
+    const nearDue = nearDueTasks.length;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
     const getTaskCustShip = (taskId: string) =>
@@ -644,6 +645,7 @@ export default function KanbanBoard() {
       done,
       inProgress,
       nearDue,
+      nearDueTasks,
       overdue,
       percent,
       totalRevenue,
@@ -1321,7 +1323,7 @@ export default function KanbanBoard() {
               className="h-16 w-auto mx-auto rounded-2xl object-contain bg-white border border-[#f9e1d3] px-3 py-1.5 shadow-sm"
             />
             <h1 className="text-lg font-bold text-[#77585e]">
-              Red Roof House Board
+              redroofhouse studio
             </h1>
             <p className="text-xs text-[#789ea5] font-medium">
               เข้าสู่ระบบ
@@ -1464,7 +1466,7 @@ export default function KanbanBoard() {
             />
             <div>
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-[#77585e]">
-                Red Roof House Board
+                redroofhouse studio
               </h1>
             </div>
           </div>
@@ -1793,7 +1795,7 @@ export default function KanbanBoard() {
                 : "bg-white/45 border-[#f9e1d3] opacity-55"
             }`}
           >
-            <div>
+            <div className="min-w-0 flex-1">
               <p
                 className={`text-xs font-semibold flex items-center gap-1 ${
                   onlyNearDue
@@ -1821,6 +1823,19 @@ export default function KanbanBoard() {
               >
                 {stats.nearDue} งาน
               </p>
+              {stats.nearDueTasks.length > 0 && (
+                <div
+                  className={`mt-1.5 space-y-0.5 max-h-16 overflow-y-auto text-[11px] ${
+                    onlyNearDue ? "text-white/95" : "text-[#77585e]"
+                  }`}
+                >
+                  {stats.nearDueTasks.map((t) => (
+                    <p key={t.id} className="truncate font-medium">
+                      - {t.customer_name || t.title}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
             {stats.nearDue > 0 && <span className="text-2xl">⏰</span>}
           </div>

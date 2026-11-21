@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Red Roof House Board - ระบบแทรกกิ้งงานรายเดือน",
+  title: "redroofhouse studio - ระบบแทรกกิ้งงานรายเดือน",
   description: "Kanban Board ส่วนตัวสำหรับจัดการงานรายเดือน พร้อมเชื่อมต่อ Supabase Cloud",
   icons: {
     icon: "/favicon.png",
