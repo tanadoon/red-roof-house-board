@@ -2423,6 +2423,40 @@ export default function KanbanBoard() {
                                   ลูกค้าออก ฿{formatTHB(taskHopCustCost)}
                                 </div>
                               )}
+                              {agreedPrice > 0 &&
+                                (() => {
+                                  const shopShippingPct =
+                                    Math.round(
+                                      (taskHopShopCost / agreedPrice) * 1000
+                                    ) / 10;
+                                  const netWorkIncome =
+                                    agreedPrice - taskHopShopCost;
+                                  return (
+                                    <div className="mt-1 pt-1 border-t border-[#cc8867]/25 flex items-center justify-between gap-1 text-[10px]">
+                                      <span
+                                        className={`font-semibold ${
+                                          netWorkIncome < 0 ||
+                                          shopShippingPct >= 40
+                                            ? "text-[#ca5151]"
+                                            : shopShippingPct >= 20
+                                            ? "text-[#b36236]"
+                                            : "text-[#4c6b57]"
+                                        }`}
+                                      >
+                                        ค่าส่งร้าน: {shopShippingPct}% ของราคา
+                                      </span>
+                                      <span
+                                        className={`font-bold ${
+                                          netWorkIncome < 0
+                                            ? "text-[#ca5151]"
+                                            : "text-[#4c6b57]"
+                                        }`}
+                                      >
+                                        เหลือจริง: ฿{formatTHB(netWorkIncome)}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
                             </div>
                           )}
 
@@ -3290,6 +3324,41 @@ export default function KanbanBoard() {
                         ร้านออก ฿{formatTHB(modalShippingTotals.shopTotal)} •
                         ลูกค้าออก ฿{formatTHB(modalShippingTotals.customerTotal)}
                       </span>
+                      {(Number(formAgreedPrice) || 0) > 0 &&
+                        (() => {
+                          const agreedNum = Number(formAgreedPrice) || 0;
+                          const shopPct =
+                            Math.round(
+                              (modalShippingTotals.shopTotal / agreedNum) *
+                                1000
+                            ) / 10;
+                          const netIncome =
+                            agreedNum - modalShippingTotals.shopTotal;
+                          return (
+                            <div className="w-full pt-1.5 mt-0.5 border-t border-[#f9e1d3] flex items-center justify-between text-[11px]">
+                              <span
+                                className={`font-semibold ${
+                                  netIncome < 0 || shopPct >= 40
+                                    ? "text-[#ca5151]"
+                                    : shopPct >= 20
+                                    ? "text-[#b36236]"
+                                    : "text-[#4c6b57]"
+                                }`}
+                              >
+                                ค่าส่งร้านคิดเป็น {shopPct}% ของราคาสินค้า
+                              </span>
+                              <span
+                                className={`font-bold ${
+                                  netIncome < 0
+                                    ? "text-[#ca5151]"
+                                    : "text-[#4c6b57]"
+                                }`}
+                              >
+                                เหลือเงินจริง: ฿{formatTHB(netIncome)}
+                              </span>
+                            </div>
+                          );
+                        })()}
                     </div>
                     {modalShippingTotals.customerTotal > 0 && (
                       <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#f3e8ff]/70 border border-[#d8b4fe] cursor-pointer text-xs">
