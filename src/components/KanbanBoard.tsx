@@ -1891,12 +1891,6 @@ export default function KanbanBoard() {
           {/* Monthly Shipping Cost Card (Owner only) */}
           {isOwner &&
             (() => {
-              const totalPct =
-                stats.totalRevenue > 0
-                  ? Math.round(
-                      (monthlyShippingStats.total / stats.totalRevenue) * 1000
-                    ) / 10
-                  : 0;
               const shopPct =
                 stats.totalRevenue > 0
                   ? Math.round(
@@ -1920,7 +1914,7 @@ export default function KanbanBoard() {
                             : "bg-[#6b9078]/15 text-[#4c6b57]"
                         }`}
                       >
-                        {totalPct}% ของยอด
+                        ร้านออก {shopPct}% ของยอด
                       </span>
                     )}
                   </div>
@@ -1933,8 +1927,7 @@ export default function KanbanBoard() {
                       ด่วน/พิเศษ ฿{formatTHB(monthlyShippingStats.specialTotal)}
                     </p>
                     <p className="text-[#77585e]/75">
-                      ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)}
-                      {stats.totalRevenue > 0 ? ` (${shopPct}%)` : ""} • ลูกค้า ฿
+                      ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)} • ลูกค้า ฿
                       {formatTHB(monthlyShippingStats.customerTotal)}
                     </p>
                   </div>
