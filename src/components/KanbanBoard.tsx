@@ -1889,31 +1889,58 @@ export default function KanbanBoard() {
           </div>
 
           {/* Monthly Shipping Cost Card (Owner only) */}
-          {isOwner && (
-            <div className="col-span-2 lg:col-span-1 bg-white/90 border border-[#cc8867]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
-              <div className="flex items-center justify-between gap-1">
-                <p className="text-xs text-[#77585e] font-semibold">
-                  ค่าขนส่งเดือนนี้ (วันส่งจริง)
-                </p>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#f9e1d3] text-[#77585e]">
-                  {monthlyShippingStats.hopCount} ขั้น
-                </span>
-              </div>
-              <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
-                ฿{formatTHB(monthlyShippingStats.total)}
-              </p>
-              <div className="text-[11px] text-[#77585e]/85 mt-0.5 space-y-0.5">
-                <p>
-                  ปกติ ฿{formatTHB(monthlyShippingStats.normalTotal)} •
-                  ด่วน/พิเศษ ฿{formatTHB(monthlyShippingStats.specialTotal)}
-                </p>
-                <p className="text-[#77585e]/75">
-                  ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)} • ลูกค้า ฿
-                  {formatTHB(monthlyShippingStats.customerTotal)}
-                </p>
-              </div>
-            </div>
-          )}
+          {isOwner &&
+            (() => {
+              const totalPct =
+                stats.totalRevenue > 0
+                  ? Math.round(
+                      (monthlyShippingStats.total / stats.totalRevenue) * 1000
+                    ) / 10
+                  : 0;
+              const shopPct =
+                stats.totalRevenue > 0
+                  ? Math.round(
+                      (monthlyShippingStats.shopTotal / stats.totalRevenue) *
+                        1000
+                    ) / 10
+                  : 0;
+              return (
+                <div className="col-span-2 lg:col-span-1 bg-white/90 border border-[#cc8867]/45 rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-xs text-[#77585e] font-semibold">
+                      ค่าขนส่งเดือนนี้ (วันส่งจริง)
+                    </p>
+                    {stats.totalRevenue > 0 && (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          shopPct >= 40
+                            ? "bg-[#ffc0b8]/50 text-[#ca5151]"
+                            : shopPct >= 20
+                            ? "bg-[#ffd590]/60 text-[#b36236]"
+                            : "bg-[#6b9078]/15 text-[#4c6b57]"
+                        }`}
+                      >
+                        {totalPct}% ของยอด
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
+                    ฿{formatTHB(monthlyShippingStats.total)}
+                  </p>
+                  <div className="text-[11px] text-[#77585e]/85 mt-0.5 space-y-0.5">
+                    <p>
+                      ปกติ ฿{formatTHB(monthlyShippingStats.normalTotal)} •
+                      ด่วน/พิเศษ ฿{formatTHB(monthlyShippingStats.specialTotal)}
+                    </p>
+                    <p className="text-[#77585e]/75">
+                      ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)}
+                      {stats.totalRevenue > 0 ? ` (${shopPct}%)` : ""} • ลูกค้า ฿
+                      {formatTHB(monthlyShippingStats.customerTotal)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
         </div>
 
         {/* Search & Filter Controls */}
