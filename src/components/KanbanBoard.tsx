@@ -229,6 +229,18 @@ function isNearDue(dueDate: string | null, status: TaskStatus): boolean {
   return diffDays >= 0 && diffDays <= 5;
 }
 
+function isTaskOverdue(task: {
+  due_date?: string | null;
+  delivery_date?: string | null;
+  status: TaskStatus;
+}): boolean {
+  if (task.status === "delivered") return false;
+  const today = getTodayStr();
+  if (task.due_date && task.due_date < today) return true;
+  if (task.delivery_date && task.delivery_date < today) return true;
+  return false;
+}
+
 function formatTHB(amount: number): string {
   return Number(amount || 0).toLocaleString("th-TH");
 }
@@ -564,17 +576,12 @@ export default function KanbanBoard() {
         if (paymentFilter === "unpaid_any" && isAllPaid) return false;
       }
       if (onlyNearDue) {
-        const checkDate = task.delivery_date || task.due_date;
-        if (
-          !isNearDue(task.due_date, task.status) ||
-          getDueStatus(checkDate, task.status) === "overdue"
-        ) {
+        if (!isNearDue(task.due_date, task.status) || isTaskOverdue(task)) {
           return false;
         }
       }
       if (onlyOverdue) {
-        const checkDate = task.delivery_date || task.due_date;
-        if (getDueStatus(checkDate, task.status) !== "overdue") {
+        if (!isTaskOverdue(task)) {
           return false;
         }
       }
@@ -596,17 +603,10 @@ export default function KanbanBoard() {
     const total = tasks.length;
     const done = tasks.filter((t) => t.status === "delivered").length;
     const inProgress = tasks.filter((t) => t.status !== "delivered").length;
-    const overdue = tasks.filter((t) => {
-      const checkDate = t.delivery_date || t.due_date;
-      return getDueStatus(checkDate, t.status) === "overdue";
-    }).length;
-    const nearDueTasks = tasks.filter((t) => {
-      const checkDate = t.delivery_date || t.due_date;
-      return (
-        isNearDue(t.due_date, t.status) &&
-        getDueStatus(checkDate, t.status) !== "overdue"
-      );
-    });
+    const overdue = tasks.filter((t) => isTaskOverdue(t)).length;
+    const nearDueTasks = tasks.filter(
+      (t) => isNearDue(t.due_date, t.status) && !isTaskOverdue(t)
+    );
     const nearDue = nearDueTasks.length;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
 
@@ -2165,7 +2165,9 @@ export default function KanbanBoard() {
                   ) : (
                     colTasks.map((task) => {
                       const checkDate = task.delivery_date || task.due_date;
-                      const dueState = getDueStatus(checkDate, task.status);
+                      const dueState = isTaskOverdue(task)
+                        ? "overdue"
+                        : getDueStatus(checkDate, task.status);
                       const nearDueState =
                         isNearDue(task.due_date, task.status) &&
                         dueState !== "overdue";
