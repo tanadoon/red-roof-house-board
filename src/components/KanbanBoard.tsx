@@ -685,18 +685,10 @@ export default function KanbanBoard() {
     );
     const normalTotal = monthHops
       .filter((h) => (h.shipping_type || "normal") === "normal")
-      .reduce(
-        (s, h) =>
-          s + (Number(h.shop_cost) || 0) + (Number(h.customer_cost) || 0),
-        0
-      );
+      .reduce((s, h) => s + (Number(h.shop_cost) || 0), 0);
     const specialTotal = monthHops
       .filter((h) => h.shipping_type === "special")
-      .reduce(
-        (s, h) =>
-          s + (Number(h.shop_cost) || 0) + (Number(h.customer_cost) || 0),
-        0
-      );
+      .reduce((s, h) => s + (Number(h.shop_cost) || 0), 0);
     return {
       total: shopTotal + customerTotal,
       shopTotal,
@@ -1919,7 +1911,7 @@ export default function KanbanBoard() {
                     )}
                   </div>
                   <p className="text-lg sm:text-xl font-bold text-[#77585e] mt-1">
-                    ฿{formatTHB(monthlyShippingStats.total)}
+                    ฿{formatTHB(monthlyShippingStats.shopTotal)}
                   </p>
                   <div className="text-[11px] text-[#77585e]/85 mt-0.5 space-y-0.5">
                     <p>
@@ -1927,7 +1919,7 @@ export default function KanbanBoard() {
                       ด่วน/พิเศษ ฿{formatTHB(monthlyShippingStats.specialTotal)}
                     </p>
                     <p className="text-[#77585e]/75">
-                      ร้านออก ฿{formatTHB(monthlyShippingStats.shopTotal)} • ลูกค้า ฿
+                      ลูกค้าออกแยก: ฿
                       {formatTHB(monthlyShippingStats.customerTotal)}
                     </p>
                   </div>
