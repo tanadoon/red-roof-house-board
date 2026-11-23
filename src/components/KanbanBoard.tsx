@@ -344,6 +344,10 @@ export default function KanbanBoard() {
   // Drag state
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{
+    taskId: string;
+    placement: "before" | "after";
+  } | null>(null);
 
   // Delivery Payment Prompt Modal
   const [pendingDeliveryTask, setPendingDeliveryTask] = useState<Task | null>(
@@ -1277,8 +1281,110 @@ export default function KanbanBoard() {
     const taskId = e.dataTransfer.getData("text/plain") || draggedTaskId;
     setDraggedTaskId(null);
     setDragOverColumn(null);
+    setDragOverTarget(null);
     if (taskId) {
-      await handleStatusChange(taskId, status);
+      await handleDropOnBoard(taskId, status, null, "after");
+    }
+  };
+
+  const handleDropOnBoard = async (
+    taskId: string,
+    targetStatus: TaskStatus,
+    targetTaskId: string | null = null,
+    placement: "before" | "after" = "after"
+  ) => {
+    if (!isOwner) return;
+    const draggedTask = tasks.find((t) => t.id === taskId);
+    if (!draggedTask) return;
+
+    if (draggedTask.status !== targetStatus && targetStatus === "delivered") {
+      const hasUnpaidWork = getRemainingBalance(draggedTask) > 0;
+      const custShipCost = getTaskCustomerShippingCost(draggedTask.id);
+      const hasUnpaidShipping = custShipCost > 0 && !draggedTask.shipping_paid;
+      if (hasUnpaidWork || hasUnpaidShipping) {
+        setPendingDeliveryTask(draggedTask);
+        return;
+      }
+    }
+
+    if (targetTaskId === taskId) return;
+
+    const isSameLane = draggedTask.status === targetStatus;
+    const destTasks = tasks
+      .filter((t) => t.status === targetStatus && t.id !== taskId)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+    let insertIdx = destTasks.length;
+    if (targetTaskId) {
+      const targetIdx = destTasks.findIndex((t) => t.id === targetTaskId);
+      if (targetIdx !== -1) {
+        insertIdx = placement === "before" ? targetIdx : targetIdx + 1;
+      }
+    }
+
+    const updatedMonth =
+      !isSameLane &&
+      targetStatus === "delivered" &&
+      draggedTask.month < selectedMonth
+        ? selectedMonth
+        : draggedTask.month;
+
+    const movedTask: Task = {
+      ...draggedTask,
+      status: targetStatus,
+      month: updatedMonth,
+    };
+    const nextDestTasks = [...destTasks];
+    nextDestTasks.splice(insertIdx, 0, movedTask);
+
+    const positionMap = new Map<string, number>();
+    nextDestTasks.forEach((t, idx) => positionMap.set(t.id, idx));
+
+    setTasks((prev) =>
+      prev
+        .map((t) => {
+          if (t.id === taskId) {
+            return { ...movedTask, position: positionMap.get(t.id) ?? 0 };
+          }
+          if (positionMap.has(t.id)) {
+            return { ...t, position: positionMap.get(t.id) ?? 0 };
+          }
+          return t;
+        })
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    );
+
+    try {
+      const updates: Promise<unknown>[] = [];
+      nextDestTasks.forEach((t, idx) => {
+        if (t.id === taskId) {
+          updates.push(
+            updateTask(t.id, {
+              status: targetStatus,
+              month: updatedMonth,
+              position: idx,
+            })
+          );
+        } else if ((t.position ?? 0) !== idx) {
+          updates.push(updateTask(t.id, { position: idx }));
+        }
+      });
+      await Promise.all(updates);
+
+      if (!isSameLane) {
+        const afterWorkPaid = getRemainingBalance(draggedTask) === 0;
+        const custShip = getTaskCustomerShippingCost(taskId);
+        const afterShipPaid =
+          custShip === 0 || Boolean(draggedTask.shipping_paid);
+        await recordTaskStatusTransition(
+          taskId,
+          targetStatus,
+          targetStatus === "delivered" && afterWorkPaid && afterShipPaid
+        );
+        fetchAllStatusHistory().then(setAllStatusHistory).catch(() => {});
+      }
+    } catch {
+      await loadBoard(selectedMonth);
     }
   };
 
@@ -2110,9 +2216,18 @@ export default function KanbanBoard() {
             return (
               <div
                 key={col.id}
-                onDragOver={(e) => onDragOver(e, col.id)}
-                onDragLeave={() => setDragOverColumn(null)}
-                onDrop={(e) => onDrop(e, col.id)}
+                onDragOver={(e) => {
+                  if (!isOwner) return;
+                  onDragOver(e, col.id);
+                }}
+                onDragLeave={() => {
+                  setDragOverColumn(null);
+                  setDragOverTarget(null);
+                }}
+                onDrop={(e) => {
+                  if (!isOwner) return;
+                  onDrop(e, col.id);
+                }}
                 className={`snap-start shrink-0 ${
                   mobileStageTab === "all"
                     ? "w-[85vw] sm:w-[300px] 2xl:w-auto"
@@ -2204,23 +2319,84 @@ export default function KanbanBoard() {
                         task.status === "delivered" &&
                         (remainingBalance > 0 || isShippingUnpaid);
 
+                      const showDropBefore =
+                        dragOverTarget?.taskId === task.id &&
+                        dragOverTarget.placement === "before";
+                      const showDropAfter =
+                        dragOverTarget?.taskId === task.id &&
+                        dragOverTarget.placement === "after";
+
                       return (
-                        <div
-                          key={task.id}
-                          draggable={isOwner}
-                          onDragStart={(e) => {
-                            if (!isOwner) return;
-                            onDragStart(e, task.id);
-                          }}
-                          onDragEnd={() => {
-                            setDraggedTaskId(null);
-                            setDragOverColumn(null);
-                          }}
-                          className={`rounded-2xl border p-3.5 shadow-sm transition space-y-2.5 ${
-                            isOwner
-                              ? "hover:shadow-md cursor-grab active:cursor-grabbing"
-                              : ""
-                          } ${
+                        <React.Fragment key={task.id}>
+                          {showDropBefore && (
+                            <div className="h-1.5 rounded-full bg-[#ca5151] shadow-sm transition-all" />
+                          )}
+                          <div
+                            draggable={isOwner}
+                            onDragStart={(e) => {
+                              if (!isOwner) return;
+                              onDragStart(e, task.id);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedTaskId(null);
+                              setDragOverColumn(null);
+                              setDragOverTarget(null);
+                            }}
+                            onDragOver={(e) => {
+                              if (
+                                !isOwner ||
+                                !draggedTaskId ||
+                                draggedTaskId === task.id
+                              )
+                                return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const rect =
+                                e.currentTarget.getBoundingClientRect();
+                              const placement =
+                                e.clientY < rect.top + rect.height / 2
+                                  ? "before"
+                                  : "after";
+                              setDragOverColumn(col.id);
+                              setDragOverTarget((prev) =>
+                                prev &&
+                                prev.taskId === task.id &&
+                                prev.placement === placement
+                                  ? prev
+                                  : { taskId: task.id, placement }
+                              );
+                            }}
+                            onDrop={(e) => {
+                              if (!isOwner) return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const id =
+                                e.dataTransfer.getData("text/plain") ||
+                                draggedTaskId;
+                              const rect =
+                                e.currentTarget.getBoundingClientRect();
+                              const placement =
+                                e.clientY < rect.top + rect.height / 2
+                                  ? "before"
+                                  : "after";
+                              setDraggedTaskId(null);
+                              setDragOverColumn(null);
+                              setDragOverTarget(null);
+                              if (id)
+                                handleDropOnBoard(
+                                  id,
+                                  col.id,
+                                  task.id,
+                                  placement
+                                );
+                            }}
+                            className={`rounded-2xl border p-3.5 shadow-sm transition space-y-2.5 ${
+                              draggedTaskId === task.id ? "opacity-45" : ""
+                            } ${
+                              isOwner
+                                ? "hover:shadow-md cursor-grab active:cursor-grabbing"
+                                : ""
+                            } ${
                             isDeliveredButUnpaid
                               ? "border-2 border-[#cc8867] bg-[#ffd590]/20"
                               : task.status === "delivered"
@@ -2727,6 +2903,10 @@ export default function KanbanBoard() {
                             )}
                           </div>
                         </div>
+                        {showDropAfter && (
+                          <div className="h-1.5 rounded-full bg-[#ca5151] shadow-sm transition-all" />
+                        )}
+                        </React.Fragment>
                       );
                     })
                   )}
