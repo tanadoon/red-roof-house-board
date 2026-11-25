@@ -225,7 +225,7 @@
     }
 
     function isTaskOverdue(task) {
-      if (!task || task.status === "delivered") return false;
+      if (!task) return false;
       const today = getTodayStr();
       if (task.due_date && task.due_date < today) return true;
       if (task.delivery_date && task.delivery_date < today) return true;

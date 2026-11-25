@@ -234,7 +234,6 @@ function isTaskOverdue(task: {
   delivery_date?: string | null;
   status: TaskStatus;
 }): boolean {
-  if (task.status === "delivered") return false;
   const today = getTodayStr();
   if (task.due_date && task.due_date < today) return true;
   if (task.delivery_date && task.delivery_date < today) return true;
