@@ -631,7 +631,10 @@ export default function KanbanBoard() {
         }
       }
       if (onlyOverdue) {
-        if (!isTaskOverdue(task, allStatusHistory)) {
+        if (
+          task.status === "delivered" ||
+          !isTaskOverdue(task, allStatusHistory)
+        ) {
           return false;
         }
       }
@@ -654,8 +657,8 @@ export default function KanbanBoard() {
     const total = tasks.length;
     const done = tasks.filter((t) => t.status === "delivered").length;
     const inProgress = tasks.filter((t) => t.status !== "delivered").length;
-    const overdue = tasks.filter((t) =>
-      isTaskOverdue(t, allStatusHistory)
+    const overdue = tasks.filter(
+      (t) => t.status !== "delivered" && isTaskOverdue(t, allStatusHistory)
     ).length;
     const nearDueTasks = tasks.filter(
       (t) => isNearDue(t) && !isTaskOverdue(t, allStatusHistory)
@@ -2494,8 +2497,16 @@ export default function KanbanBoard() {
                               )}
 
                               {dueState === "overdue" && (
-                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#ca5151] text-white animate-pulse">
-                                  🚨 เลยกำหนด
+                                <span
+                                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
+                                    task.status === "delivered"
+                                      ? "bg-[#ca5151]/15 text-[#ca5151] border border-[#ca5151]/35"
+                                      : "bg-[#ca5151] text-white animate-pulse"
+                                  }`}
+                                >
+                                  {task.status === "delivered"
+                                    ? "เลยกำหนด"
+                                    : "🚨 เลยกำหนด"}
                                 </span>
                               )}
                             </div>
@@ -2914,7 +2925,8 @@ export default function KanbanBoard() {
                           <div className="pt-2 border-t border-[#f9e1d3] flex items-center justify-between gap-2">
                             <span
                               className={`text-[11px] shrink-0 ${
-                                dueState === "overdue"
+                                dueState === "overdue" &&
+                                task.status !== "delivered"
                                   ? "text-[#ca5151] font-bold"
                                   : "text-[#77585e]/80 font-medium"
                               }`}
