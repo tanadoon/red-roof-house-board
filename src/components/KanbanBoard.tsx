@@ -219,25 +219,72 @@ function getDueStatus(
   return "upcoming";
 }
 
-function isNearDue(dueDate: string | null, status: TaskStatus): boolean {
-  if (!dueDate || status === "delivered") return false;
-  const todayStr = getTodayStr();
-  const todayMs = new Date(`${todayStr}T00:00:00`).getTime();
-  const dueMs = new Date(`${dueDate}T00:00:00`).getTime();
-  if (Number.isNaN(todayMs) || Number.isNaN(dueMs)) return false;
-  const diffDays = Math.round((dueMs - todayMs) / (1000 * 60 * 60 * 24));
-  return diffDays >= 0 && diffDays <= 5;
+function getBangkokDateStr(isoStr?: string | null): string {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  return y && m && day ? `${y}-${m}-${day}` : "";
 }
 
-function isTaskOverdue(task: {
+function isWithinDaysBefore(
+  targetDate: string | null | undefined,
+  todayStr: string,
+  days: number
+): boolean {
+  if (!targetDate) return false;
+  const todayMs = new Date(`${todayStr}T00:00:00`).getTime();
+  const targetMs = new Date(`${targetDate}T00:00:00`).getTime();
+  if (Number.isNaN(todayMs) || Number.isNaN(targetMs)) return false;
+  const diffDays = Math.round((targetMs - todayMs) / (1000 * 60 * 60 * 24));
+  return diffDays >= 0 && diffDays <= days;
+}
+
+function isNearDue(task: {
   due_date?: string | null;
   delivery_date?: string | null;
   status: TaskStatus;
 }): boolean {
+  if (task.status === "delivered") return false;
   const today = getTodayStr();
-  if (task.due_date && task.due_date < today) return true;
-  if (task.delivery_date && task.delivery_date < today) return true;
-  return false;
+  return (
+    isWithinDaysBefore(task.delivery_date, today, 6) ||
+    isWithinDaysBefore(task.due_date, today, 6)
+  );
+}
+
+function isTaskOverdue(
+  task: {
+    id: string;
+    due_date?: string | null;
+    delivery_date?: string | null;
+    status: TaskStatus;
+  },
+  statusHistory: TaskStatusHistory[] = []
+): boolean {
+  if (!task.delivery_date) return false;
+  const today = getTodayStr();
+  if (task.status !== "delivered") {
+    return today > task.delivery_date;
+  }
+  const deliveredEntries = statusHistory
+    .filter((h) => h.task_id === task.id && h.status === "delivered")
+    .sort(
+      (a, b) =>
+        new Date(a.entered_at).getTime() - new Date(b.entered_at).getTime()
+    );
+  const latestDelivered = deliveredEntries[deliveredEntries.length - 1];
+  if (!latestDelivered) return false;
+  const deliveredDate = getBangkokDateStr(latestDelivered.entered_at);
+  return Boolean(deliveredDate && deliveredDate > task.delivery_date);
 }
 
 function formatTHB(amount: number): string {
@@ -579,12 +626,12 @@ export default function KanbanBoard() {
         if (paymentFilter === "unpaid_any" && isAllPaid) return false;
       }
       if (onlyNearDue) {
-        if (!isNearDue(task.due_date, task.status) || isTaskOverdue(task)) {
+        if (!isNearDue(task) || isTaskOverdue(task, allStatusHistory)) {
           return false;
         }
       }
       if (onlyOverdue) {
-        if (!isTaskOverdue(task)) {
+        if (!isTaskOverdue(task, allStatusHistory)) {
           return false;
         }
       }
@@ -593,6 +640,7 @@ export default function KanbanBoard() {
   }, [
     tasks,
     allShippingHops,
+    allStatusHistory,
     searchQuery,
     priorityFilter,
     sizeFilter,
@@ -606,9 +654,11 @@ export default function KanbanBoard() {
     const total = tasks.length;
     const done = tasks.filter((t) => t.status === "delivered").length;
     const inProgress = tasks.filter((t) => t.status !== "delivered").length;
-    const overdue = tasks.filter((t) => isTaskOverdue(t)).length;
+    const overdue = tasks.filter((t) =>
+      isTaskOverdue(t, allStatusHistory)
+    ).length;
     const nearDueTasks = tasks.filter(
-      (t) => isNearDue(t.due_date, t.status) && !isTaskOverdue(t)
+      (t) => isNearDue(t) && !isTaskOverdue(t, allStatusHistory)
     );
     const nearDue = nearDueTasks.length;
     const percent = total === 0 ? 0 : Math.round((done / total) * 100);
@@ -658,7 +708,7 @@ export default function KanbanBoard() {
       totalRemainingToCollect,
       deliveredUnpaidCount,
     };
-  }, [tasks, allShippingHops]);
+  }, [tasks, allShippingHops, allStatusHistory]);
 
   // Size Quota summary for the selected month
   const quotaSummary = useMemo(() => {
@@ -2279,12 +2329,11 @@ export default function KanbanBoard() {
                   ) : (
                     colTasks.map((task) => {
                       const checkDate = task.delivery_date || task.due_date;
-                      const dueState = isTaskOverdue(task)
+                      const dueState = isTaskOverdue(task, allStatusHistory)
                         ? "overdue"
                         : getDueStatus(checkDate, task.status);
                       const nearDueState =
-                        isNearDue(task.due_date, task.status) &&
-                        dueState !== "overdue";
+                        isNearDue(task) && dueState !== "overdue";
                       const pStyle =
                         PRIORITY_STYLES[task.priority] ||
                         PRIORITY_STYLES.medium;
